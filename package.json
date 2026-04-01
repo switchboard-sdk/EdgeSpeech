@@ -1,0 +1,57 @@
+{
+  "name": "switchboard-voice-rn",
+  "version": "0.1.0",
+  "description": "React Native library for on-device voice processing with Switchboard SDK",
+  "main": "src/index.ts",
+  "scripts": {
+    "postinstall": "node scripts/postinstall.js",
+    "test": "jest",
+    "lint": "eslint . --fix",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "react-native",
+    "voice",
+    "speech",
+    "stt",
+    "tts",
+    "vad",
+    "switchboard",
+    "whisper"
+  ],
+  "author": "",
+  "license": "MIT",
+  "homepage": "https://github.com/switchboard-sdk/switchboard-voice-rn#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/switchboard-sdk/switchboard-voice-rn.git"
+  },
+  "peerDependencies": {
+    "expo": ">=51.0.0",
+    "react": ">=18.0.0",
+    "react-native": ">=0.74.0"
+  },
+  "dependencies": {
+    "expo-modules-core": ">=2.0.0"
+  },
+  "devDependencies": {
+    "@react-native/babel-preset": "^0.76.0",
+    "@react-native/eslint-config": "^0.76.0",
+    "@react-native/metro-config": "^0.76.0",
+    "@react-native/typescript-config": "^0.76.0",
+    "@types/react": "^18.2.6",
+    "@types/jest": "^29.5.0",
+    "eslint": "^8.57.1",
+    "jest": "^29.6.3",
+    "prettier": "^2.8.8",
+    "typescript": "^5.0.4"
+  },
+  "codegenConfig": {
+    "name": "SwitchboardVoiceSpecs",
+    "type": "modules",
+    "jsSrcsDir": "specs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

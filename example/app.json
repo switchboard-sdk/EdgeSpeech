@@ -1,0 +1,25 @@
+{
+  "expo": {
+    "name": "Switchboard Voice Example",
+    "slug": "switchboard-voice-expo-example",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.switchboard.voiceexample",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "This app needs microphone access for voice recognition"
+      },
+      "appleTeamId": "NQ2VLM7NM7"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#ffffff"
+      },
+      "edgeToEdgeEnabled": true,
+      "package": "com.switchboard.voiceexample"
+    }
+  }
+}
