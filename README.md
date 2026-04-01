@@ -1,4 +1,4 @@
-# LCL-Speech: Switchboard for Voice AI for React Native
+# EdgeSpeech: Switchboard for Voice AI for React Native
 
 **On-device voice processing for React Native apps. Work entirely in text.**
 
