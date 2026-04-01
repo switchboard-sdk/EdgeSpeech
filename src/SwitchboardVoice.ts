@@ -267,6 +267,7 @@ class SwitchboardVoiceAPI {
     this._subscriptions = []
     this._isConfigured = false
     this._currentState = 'idle'
+    this._listenersSetup = false
     this._onTranscript = null
     this._onStateChange = null
     this._onInterrupted = null

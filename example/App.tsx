@@ -99,8 +99,8 @@ function App(): React.JSX.Element {
     });
 
     const interruptedSub = SwitchboardVoiceModule.addListener('onInterrupted', () => {
-      console.log('User interrupted!');
-      Alert.alert('Interrupted', 'You interrupted the speech');
+      console.log('[Barge-in] User interrupted TTS');
+      // Engine stays running; the barge-in transcript fires next via onTranscript(isFinal).
     });
 
     const errorSub = SwitchboardVoiceModule.addListener('onError', (event: ErrorEvent) => {

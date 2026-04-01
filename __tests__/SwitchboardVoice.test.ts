@@ -1,26 +1,18 @@
 import { SwitchboardVoice } from '../src/SwitchboardVoice';
 import type { VoiceConfig, VoiceState, VoiceError } from '../src/types';
 
-// Mock the native module
-jest.mock('react-native', () => ({
-  NativeModules: {
-    NativeSwitchboardVoiceModule: {
-      initialize: jest.fn(() => Promise.resolve()),
-      configure: jest.fn(() => Promise.resolve()),
-      start: jest.fn(() => Promise.resolve()),
-      stop: jest.fn(() => Promise.resolve()),
-      speak: jest.fn(() => Promise.resolve()),
-      stopSpeaking: jest.fn(() => Promise.resolve()),
-      requestMicrophonePermission: jest.fn(() => Promise.resolve(true)),
-    },
-  },
-  NativeEventEmitter: jest.fn(() => ({
+// Mock the native module (SwitchboardVoiceModule uses expo-modules-core, so mock it directly)
+jest.mock('../src/SwitchboardVoiceModule', () => ({
+  __esModule: true,
+  default: {
     addListener: jest.fn(() => ({ remove: jest.fn() })),
-    removeAllListeners: jest.fn(),
-  })),
-  Platform: {
-    OS: 'ios',
-    select: (obj: Record<string, unknown>) => obj.ios || obj.default,
+    initialize: jest.fn(),
+    configure: jest.fn(),
+    start: jest.fn(() => Promise.resolve()),
+    stop: jest.fn(() => Promise.resolve()),
+    speak: jest.fn(() => Promise.resolve()),
+    stopSpeaking: jest.fn(() => Promise.resolve()),
+    requestMicrophonePermission: jest.fn(() => Promise.resolve(true)),
   },
 }));
 

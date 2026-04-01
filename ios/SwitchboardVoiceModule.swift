@@ -71,46 +71,6 @@ public class SwitchboardVoiceModule: Module, AudioGraphManagerDelegate {
             )
         }
 
-        // Create Listening Engine
-        Function("createListeningEngine") { () -> String in
-            print("[SwitchboardVoice] createListeningEngine called")
-
-            guard self.isInitialized else {
-                self.emitError(code: "NOT_INITIALIZED", message: "SDK not initialized. Call initialize() first.")
-                return ""
-            }
-
-            do {
-                let engineId = try self.audioGraphManager?.createListeningEngine() ?? ""
-                print("[SwitchboardVoice] Listening engine created: \(engineId)")
-                return engineId
-            } catch {
-                print("[SwitchboardVoice] Failed to create listening engine: \(error.localizedDescription)")
-                self.emitError(code: "ENGINE_CREATION_FAILED", message: error.localizedDescription)
-                return ""
-            }
-        }
-
-        // Create TTS Engine
-        Function("createTTSEngine") { () -> String in
-            print("[SwitchboardVoice] createTTSEngine called")
-
-            guard self.isInitialized else {
-                self.emitError(code: "NOT_INITIALIZED", message: "SDK not initialized. Call initialize() first.")
-                return ""
-            }
-
-            do {
-                let engineId = try self.audioGraphManager?.createTTSEngine() ?? ""
-                print("[SwitchboardVoice] TTS engine created: \(engineId)")
-                return engineId
-            } catch {
-                print("[SwitchboardVoice] Failed to create TTS engine: \(error.localizedDescription)")
-                self.emitError(code: "ENGINE_CREATION_FAILED", message: error.localizedDescription)
-                return ""
-            }
-        }
-
         // Start listening
         AsyncFunction("start") { (promise: Promise) in
             print("[SwitchboardVoice] start called")
@@ -121,10 +81,10 @@ public class SwitchboardVoiceModule: Module, AudioGraphManagerDelegate {
             }
 
             DispatchQueue.main.async {
-                // Ensure we have a listening engine
+                // Create engine on first start
                 if self.audioGraphManager?.hasEngine != true {
                     do {
-                        _ = try self.audioGraphManager?.createListeningEngine()
+                        _ = try self.audioGraphManager?.createEngine()
                     } catch {
                         promise.reject("ENGINE_CREATION_FAILED", error.localizedDescription)
                         return
@@ -182,19 +142,6 @@ public class SwitchboardVoiceModule: Module, AudioGraphManagerDelegate {
             } catch {
                 promise.reject("STOP_SPEAKING_FAILED", error.localizedDescription)
             }
-        }
-
-        // Set value
-        Function("setValue") { (engineId: String, key: String, value: Double) in
-            print("[SwitchboardVoice] setValue called: engineId=\(engineId), key=\(key), value=\(value)")
-            // TODO: Implement dynamic parameter updates
-        }
-
-        // Get value
-        Function("getValue") { (engineId: String, key: String) -> Double in
-            print("[SwitchboardVoice] getValue called: engineId=\(engineId), key=\(key)")
-            // TODO: Implement dynamic parameter retrieval
-            return 0.0
         }
 
         // Request microphone permission
