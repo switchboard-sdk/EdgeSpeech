@@ -37,6 +37,11 @@ public class SwitchboardVoiceModule: Module, AudioGraphManagerDelegate {
         Function("initialize") { (appId: String, appSecret: String) in
             print("[SwitchboardVoice] initialize called with appId: \(appId)")
 
+            guard !self.isInitialized else {
+                print("[SwitchboardVoice] Already initialized, skipping")
+                return
+            }
+
             do {
                 self.audioGraphManager = AudioGraphManager()
                 self.audioGraphManager?.delegate = self

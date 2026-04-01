@@ -16,8 +16,8 @@ android/
 # TypeScript
 *.tsbuildinfo
 
-# Local credentials
-credentials.ts
+# Environment variables (contains credentials)
+.env
 
 # Logs
 *.log

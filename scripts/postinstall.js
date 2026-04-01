@@ -9,7 +9,7 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 
-const SDK_VERSION = 'release/3.1.0';
+const SDK_VERSION = 'release/3.2.0';
 const SDK_BASE_URL = 'https://switchboard-sdk-public.s3.amazonaws.com/builds';
 
 const PACKAGES = [
@@ -82,7 +82,39 @@ async function downloadAndExtract(packageName) {
   return true;
 }
 
+function setupExampleEnv() {
+  const exampleDir = path.join(PACKAGE_ROOT, 'example');
+  const envExample = path.join(exampleDir, '.env.example');
+  const envFile = path.join(exampleDir, '.env');
+
+  // Only run if example directory exists (i.e., we're in the repo, not installed as a dep)
+  if (!fs.existsSync(exampleDir)) {
+    return;
+  }
+
+  if (!fs.existsSync(envExample)) {
+    return;
+  }
+
+  if (fs.existsSync(envFile)) {
+    console.log('example/.env already exists, skipping...');
+    return;
+  }
+
+  console.log('Creating example/.env from .env.example...');
+  fs.copyFileSync(envExample, envFile);
+  console.log('');
+  console.log('============================================================');
+  console.log('ACTION REQUIRED: Update example/.env with your credentials');
+  console.log('Get credentials at https://console.switchboard.audio/register');
+  console.log('============================================================');
+  console.log('');
+}
+
 async function main() {
+  // Set up example .env file
+  setupExampleEnv();
+
   // Check if frameworks already exist
   const sdkPath = path.join(FRAMEWORKS_DIR, 'SwitchboardSDK', 'ios', 'SwitchboardSDK.xcframework');
   if (fs.existsSync(sdkPath)) {

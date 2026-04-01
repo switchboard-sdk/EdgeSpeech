@@ -10,7 +10,7 @@ export interface Spec extends TurboModule {
 
   // Engine Management
   createListeningEngine(): string // Returns engineID
-  createTTSEngine(): string // Returns engineID
+  createSpeakingEngine(): string // Returns engineID
 
   // Control Methods
   start(): void

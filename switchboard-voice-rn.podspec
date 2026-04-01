@@ -19,20 +19,16 @@ Pod::Spec.new do |s|
   s.source_files = 'ios/*.swift'
 
   # Switchboard SDK frameworks - downloaded automatically via postinstall script
+  # Auto-discover Whisper lib frameworks (layout changed between SDK versions)
+  whisper_lib_frameworks = Dir[File.join(__dir__, 'ios/Frameworks/SwitchboardWhisper/ios/Release/lib/*.xcframework')].map { |f| f.sub("#{__dir__}/", '') }
+
   s.vendored_frameworks = [
     'ios/Frameworks/SwitchboardSDK/ios/SwitchboardSDK.xcframework',
     'ios/Frameworks/SwitchboardWhisper/ios/Release/SwitchboardWhisper.xcframework',
     'ios/Frameworks/SwitchboardSileroVAD/ios/SwitchboardSileroVAD.xcframework',
     'ios/Frameworks/SwitchboardOnnx/ios/SwitchboardOnnx.xcframework',
     'ios/Frameworks/SwitchboardSherpa/ios/SwitchboardSherpa.xcframework',
-    # Whisper dependencies
-    'ios/Frameworks/SwitchboardWhisper/ios/Release/lib/libggml-blas.xcframework',
-    'ios/Frameworks/SwitchboardWhisper/ios/Release/lib/libggml-base.xcframework',
-    'ios/Frameworks/SwitchboardWhisper/ios/Release/lib/libwhisper.xcframework',
-    'ios/Frameworks/SwitchboardWhisper/ios/Release/lib/libwhisper.coreml.xcframework',
-    'ios/Frameworks/SwitchboardWhisper/ios/Release/lib/libggml-cpu.xcframework',
-    'ios/Frameworks/SwitchboardWhisper/ios/Release/lib/libggml.xcframework'
-  ]
+  ] + whisper_lib_frameworks
 
   # Framework search paths
   s.pod_target_xcconfig = {

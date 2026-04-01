@@ -35,13 +35,13 @@ std::string NativeSwitchboardVoiceModule::createListeningEngine(jsi::Runtime& rt
   return "listening-engine-placeholder";
 }
 
-std::string NativeSwitchboardVoiceModule::createTTSEngine(jsi::Runtime& rt) {
-  // TODO: Create TTS audio graph
-  // Build JSON config for TTS graph
+std::string NativeSwitchboardVoiceModule::createSpeakingEngine(jsi::Runtime& rt) {
+  // TODO: Create speaking audio graph
+  // Build JSON config for speaking graph
   // Result<Switchboard::ObjectID> result = Switchboard::createEngine(jsonConfig);
-  // ttsEngineID_ = result.value();
-  std::cout << "createTTSEngine() called" << std::endl;
-  return "tts-engine-placeholder";
+  // speakingEngineID_ = result.value();
+  std::cout << "createSpeakingEngine() called" << std::endl;
+  return "speaking-engine-placeholder";
 }
 
 // Control Methods
@@ -58,15 +58,15 @@ void NativeSwitchboardVoiceModule::stop(jsi::Runtime& rt) {
 }
 
 void NativeSwitchboardVoiceModule::speak(jsi::Runtime& rt, const std::string& text) {
-  // TODO: Call TTS engine speak action
+  // TODO: Call speaking engine speak action
   // std::map<std::string, std::any> params = {{"text", text}};
-  // Switchboard::callAction(ttsEngineID_, "speak", params);
+  // Switchboard::callAction(speakingEngineID_, "speak", params);
   std::cout << "speak() called with text: " << text << std::endl;
 }
 
 void NativeSwitchboardVoiceModule::stopSpeaking(jsi::Runtime& rt) {
-  // TODO: Stop TTS engine
-  // Switchboard::callAction(ttsEngineID_, "stop", {});
+  // TODO: Stop speaking engine
+  // Switchboard::callAction(speakingEngineID_, "stop", {});
   std::cout << "stopSpeaking() called" << std::endl;
 }
 

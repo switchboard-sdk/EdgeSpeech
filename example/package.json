@@ -6,7 +6,8 @@
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "postinstall": "sed -i '' 's/jsonVersion) !== 2/jsonVersion) !== 2 \\&\\& devicesJson.info.jsonVersion !== 3/' node_modules/expo/node_modules/@expo/cli/build/src/start/platforms/ios/devicectl.js 2>/dev/null || true"
   },
   "dependencies": {
     "expo": "~54.0.32",

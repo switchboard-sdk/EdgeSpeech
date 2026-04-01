@@ -25,7 +25,7 @@ public:
 
   // Engine Management
   std::string createListeningEngine(jsi::Runtime& rt);
-  std::string createTTSEngine(jsi::Runtime& rt);
+  std::string createSpeakingEngine(jsi::Runtime& rt);
 
   // Control Methods
   void start(jsi::Runtime& rt);
@@ -54,7 +54,7 @@ public:
 
 private:
   std::string listeningEngineID_;
-  std::string ttsEngineID_;
+  std::string speakingEngineID_;
 };
 
 } // namespace facebook::react

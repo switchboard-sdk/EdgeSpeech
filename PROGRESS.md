@@ -47,7 +47,7 @@
 ### Phase 1.3: TurboModule Specification ✓
 - [x] Created `specs/NativeSwitchboardVoiceModule.ts` with TurboModule interface:
   - initialize(), configure() methods
-  - Engine management (createListeningEngine, createTTSEngine)
+  - Engine management (createListeningEngine, createSpeakingEngine)
   - Control methods (start, stop, speak, stopSpeaking)
   - Event listener setup methods
   - Dynamic parameter updates (setValue, getValue)

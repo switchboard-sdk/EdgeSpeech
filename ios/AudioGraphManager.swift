@@ -37,22 +37,19 @@ class AudioGraphManager {
 
     // TTS engine
     private var ttsEngineId: String?
-    private var ttsCompletionListenerId: NSNumber?
+    private var ttsFinishedListenerId: NSNumber?
+    private var ttsSynthesisStartedListenerId: NSNumber?
 
     // State
     private var isListening = false
     private var isSpeaking = false
     private var isInitialized = false
 
-    // Speech queue for sequential TTS playback
-    private var speechQueue: [String] = []
-    private var isProcessingQueue = false
-
     // Configuration
     private var vadSensitivity: Float = 0.5
     private var sampleRate: Int = 16000
     private var bufferSize: Int = 512
-    private var ttsVoice: String = "en_GB"  // Default voice (matches bundled model)
+    private var ttsVoice: String = "en_GB"
 
     // MARK: - Initialization
 
@@ -101,8 +98,12 @@ class AudioGraphManager {
 
         if !result.success {
             let errorMsg = result.error?.localizedDescription ?? "Unknown error"
-            print("[AudioGraphManager] SDK initialization failed: \(errorMsg)")
-            throw AudioGraphError.engineCreationFailed("SDK initialization failed: \(errorMsg)")
+            if errorMsg.contains("already been initialized") || errorMsg.contains("already initialized") {
+                print("[AudioGraphManager] SDK already initialized, continuing")
+            } else {
+                print("[AudioGraphManager] SDK initialization failed: \(errorMsg)")
+                throw AudioGraphError.engineCreationFailed("SDK initialization failed: \(errorMsg)")
+            }
         }
 
         isInitialized = true
@@ -123,7 +124,7 @@ class AudioGraphManager {
         if let voice = ttsVoice {
             self.ttsVoice = voice
         }
-        print("[AudioGraphManager] Configuration updated: vadSensitivity=\(self.vadSensitivity), sampleRate=\(self.sampleRate), bufferSize=\(self.bufferSize), ttsVoice=\(self.ttsVoice)")
+        print("[AudioGraphManager] Configuration updated: vadSensitivity=\(self.vadSensitivity), sampleRate=\(self.sampleRate), bufferSize=\(self.bufferSize)")
     }
 
     // MARK: - Engine Management
@@ -172,7 +173,7 @@ class AudioGraphManager {
         removeListeningEventListeners()
 
         if let engineId = listeningEngineId {
-            let result = Switchboard.callAction(withObjectID: engineId, actionName: "stop", params: nil)
+            let result = Switchboard.callAction(withObject: engineId, actionName: "stop", params: nil)
             if let error = result.error {
                 print("[AudioGraphManager] Warning: Failed to stop engine before destruction: \(error.localizedDescription)")
             }
@@ -221,14 +222,12 @@ class AudioGraphManager {
         removeTTSEventListeners()
 
         if let engineId = ttsEngineId {
-            let result = Switchboard.callAction(withObjectID: engineId, actionName: "stop", params: nil)
+            let result = Switchboard.callAction(withObject: engineId, actionName: "stop", params: nil)
             if let error = result.error {
                 print("[AudioGraphManager] Warning: Failed to stop TTS engine before destruction: \(error.localizedDescription)")
             }
             ttsEngineId = nil
             isSpeaking = false
-            speechQueue.removeAll()
-            isProcessingQueue = false
             print("[AudioGraphManager] TTS engine destroyed")
         }
     }
@@ -248,7 +247,7 @@ class AudioGraphManager {
 
         print("[AudioGraphManager] Starting listening engine...")
 
-        let result = Switchboard.callAction(withObjectID: engineId, actionName: "start", params: nil)
+        let result = Switchboard.callAction(withObject: engineId, actionName: "start", params: nil)
 
         if let error = result.error {
             print("[AudioGraphManager] Failed to start listening: \(error.localizedDescription)")
@@ -263,17 +262,18 @@ class AudioGraphManager {
     /// Stop listening for voice input
     func stopListening() throws {
         guard let engineId = listeningEngineId else {
-            throw AudioGraphError.noEngine
+            print("[AudioGraphManager] stopListening: no engine, ignoring")
+            return
         }
 
         guard isListening else {
-            print("[AudioGraphManager] Not currently listening")
+            print("[AudioGraphManager] Not currently listening, ignoring stop")
             return
         }
 
         print("[AudioGraphManager] Stopping listening engine...")
 
-        let result = Switchboard.callAction(withObjectID: engineId, actionName: "stop", params: nil)
+        let result = Switchboard.callAction(withObject: engineId, actionName: "stop", params: nil)
 
         if let error = result.error {
             print("[AudioGraphManager] Failed to stop listening: \(error.localizedDescription)")
@@ -287,7 +287,7 @@ class AudioGraphManager {
 
     // MARK: - TTS Control Methods
 
-    /// Speak text using TTS (adds to queue if already speaking)
+    /// Speak text using TTS
     func speak(text: String) throws {
         guard isInitialized else {
             throw AudioGraphError.notInitialized
@@ -303,17 +303,36 @@ class AudioGraphManager {
             _ = try createTTSEngine()
         }
 
-        // Add to queue
-        speechQueue.append(text)
-        print("[AudioGraphManager] Added text to speech queue: '\(text)' (queue size: \(speechQueue.count))")
-
-        // Process queue if not already processing
-        if !isProcessingQueue {
-            processNextInQueue()
+        guard let engineId = ttsEngineId else {
+            throw AudioGraphError.noTTSEngine
         }
+
+        print("[AudioGraphManager] Speaking text: '\(text)'")
+
+        // Start the TTS engine if not running
+        let startResult = Switchboard.callAction(withObject: engineId, actionName: "start", params: nil)
+        if let error = startResult.error {
+            print("[AudioGraphManager] Warning: Failed to start TTS engine: \(error.localizedDescription)")
+        }
+
+        // Send text to TTS node
+        let speakResult = Switchboard.callAction(
+            withObject: "ttsNode",
+            actionName: "synthesize",
+            params: ["text": text]
+        )
+
+        if let error = speakResult.error {
+            print("[AudioGraphManager] Failed to speak text: \(error.localizedDescription)")
+            throw AudioGraphError.speakFailed(error.localizedDescription)
+        }
+
+        isSpeaking = true
+        delegate?.audioGraphManager(self, didChangeState: "speaking")
+        print("[AudioGraphManager] TTS synthesis started")
     }
 
-    /// Stop TTS playback and clear queue
+    /// Stop TTS playback
     func stopSpeaking() throws {
         guard let engineId = ttsEngineId else {
             print("[AudioGraphManager] No TTS engine, nothing to stop")
@@ -322,12 +341,8 @@ class AudioGraphManager {
 
         print("[AudioGraphManager] Stopping TTS playback...")
 
-        // Clear the queue first
-        speechQueue.removeAll()
-        isProcessingQueue = false
-
         // Stop the TTS engine
-        let result = Switchboard.callAction(withObjectID: engineId, actionName: "stop", params: nil)
+        let result = Switchboard.callAction(withObject: engineId, actionName: "stop", params: nil)
 
         if let error = result.error {
             print("[AudioGraphManager] Failed to stop TTS: \(error.localizedDescription)")
@@ -337,52 +352,6 @@ class AudioGraphManager {
         isSpeaking = false
         delegate?.audioGraphManager(self, didChangeState: "idle")
         print("[AudioGraphManager] TTS stopped successfully")
-    }
-
-    /// Process the next item in the speech queue
-    private func processNextInQueue() {
-        guard let engineId = ttsEngineId else {
-            print("[AudioGraphManager] No TTS engine for queue processing")
-            return
-        }
-
-        guard !speechQueue.isEmpty else {
-            print("[AudioGraphManager] Speech queue empty, done processing")
-            isProcessingQueue = false
-            isSpeaking = false
-            delegate?.audioGraphManager(self, didChangeState: "idle")
-            delegate?.audioGraphManagerDidFinishSpeaking(self)
-            return
-        }
-
-        isProcessingQueue = true
-        let text = speechQueue.removeFirst()
-
-        print("[AudioGraphManager] Processing speech: '\(text)'")
-
-        // Start the TTS engine if not running
-        let startResult = Switchboard.callAction(withObjectID: engineId, actionName: "start", params: nil)
-        if let error = startResult.error {
-            print("[AudioGraphManager] Warning: Failed to start TTS engine: \(error.localizedDescription)")
-        }
-
-        // Send text to TTS node (action is "synthesize", not "speak")
-        let speakResult = Switchboard.callAction(
-            withObjectID: "ttsNode",
-            actionName: "synthesize",
-            params: ["text": text]
-        )
-
-        if let error = speakResult.error {
-            print("[AudioGraphManager] Failed to speak text: \(error.localizedDescription)")
-            // Continue processing queue even on error
-            processNextInQueue()
-            return
-        }
-
-        isSpeaking = true
-        delegate?.audioGraphManager(self, didChangeState: "speaking")
-        print("[AudioGraphManager] TTS started speaking")
     }
 
     // MARK: - Private Methods
@@ -454,15 +423,11 @@ class AudioGraphManager {
     }
 
     /// Build the TTS graph config
-    /// Uses the simpler format matching the reference implementation
     private func buildTTSGraphConfig() -> [String: Any] {
-        // TTS node
         let ttsNode: [String: Any] = [
             "id": "ttsNode",
             "type": "Sherpa.TTS",
-            "config": [
-                "voice": ttsVoice
-            ]
+            "config": ["voice": ttsVoice]
         ]
 
         // Connections (TTS → output)
@@ -498,15 +463,19 @@ class AudioGraphManager {
         print("[AudioGraphManager] Setting up listeners for engine: \(engineId)")
 
         // Listen for transcription events from STT node
-        // Use simple node ID (not engine-qualified)
-        let transcriptionResult = Switchboard.addEventListener("sttNode", eventName: "transcription") { [weak self] eventData in
+        let transcriptionResult = Switchboard.addEventListener("sttNode", eventName: "transcribed") { [weak self] eventData in
             guard let self = self else { return }
 
-            print("[AudioGraphManager] STT 'transcription' event fired! Data: \(String(describing: eventData))")
+            print("[AudioGraphManager] STT 'transcribed' event fired! Data: \(String(describing: eventData))")
 
             // Extract transcript text from event data
+            // Event structure: { "data": { "text": "...", "processingTime": ... }, "id": ..., ... }
             var transcriptText: String?
             if let text = eventData as? String {
+                transcriptText = text
+            } else if let dict = eventData as? [AnyHashable: Any],
+                      let data = dict["data"] as? [String: Any],
+                      let text = data["text"] as? String {
                 transcriptText = text
             } else if let dict = eventData as? [String: Any], let text = dict["text"] as? String {
                 transcriptText = text
@@ -522,10 +491,9 @@ class AudioGraphManager {
 
         if let listenerId = transcriptionResult.value {
             transcriptionListenerId = listenerId
-            print("[AudioGraphManager] STT 'transcription' listener added with ID: \(listenerId)")
+            print("[AudioGraphManager] STT 'transcribed' listener added with ID: \(listenerId)")
         } else if let error = transcriptionResult.error {
-            print("[AudioGraphManager] Failed to add STT 'transcription' listener: \(error.localizedDescription)")
-            throw AudioGraphError.listenerSetupFailed(error.localizedDescription)
+            print("[AudioGraphManager] Failed to add STT 'transcribed' listener: \(error.localizedDescription)")
         }
 
         // Listen for VAD start events (speech detected)
@@ -547,28 +515,12 @@ class AudioGraphManager {
 
         // Listen for VAD end events (silence detected)
         // Note: SileroVAD.VAD uses "speechEnded" event (not "end")
+        // The data connection (vadNode.speechEnded → sttNode.transcribe) handles triggering STT automatically
         let vadEndResult = Switchboard.addEventListener("vadNode", eventName: "speechEnded") { [weak self] eventData in
             guard let self = self else { return }
             print("[AudioGraphManager] VAD 'speechEnded' event fired! Data: \(String(describing: eventData))")
 
-            // DEBUG: Manually trigger STT transcribe to test if data connection is the issue
-            // The transcribe action expects start/end params from the VAD end event
-            print("[AudioGraphManager] DEBUG: VAD end eventData = \(String(describing: eventData))")
-
-            // Extract start/end from eventData if available
-            var params: [String: Any]? = nil
-            if let dict = eventData as? [String: Any] {
-                params = ["start": dict["start"] ?? 0, "end": dict["end"] ?? 0]
-            }
-
-            print("[AudioGraphManager] DEBUG: Manually calling sttNode.transcribe with params: \(String(describing: params))")
-            let transcribeResult = Switchboard.callAction(withObjectID: "sttNode", actionName: "transcribe", params: params)
-            if let error = transcribeResult.error {
-                print("[AudioGraphManager] DEBUG: Manual transcribe failed: \(error.localizedDescription)")
-            } else {
-                print("[AudioGraphManager] DEBUG: Manual transcribe call succeeded, value: \(String(describing: transcribeResult.value))")
-            }
-
+            // Notify delegate - transcription is triggered automatically via data connection
             DispatchQueue.main.async {
                 self.delegate?.audioGraphManagerDidDetectSpeechEnd(self)
             }
@@ -605,33 +557,50 @@ class AudioGraphManager {
 
     /// Set up TTS event listeners
     private func setupTTSEventListeners(for engineId: String) throws {
-        print("[AudioGraphManager] Setting up TTS listener for engine: \(engineId)")
+        print("[AudioGraphManager] Setting up TTS listeners for engine: \(engineId)")
 
-        // Listen for TTS completion events
-        let completionResult = Switchboard.addEventListener("ttsNode", eventName: "completion") { [weak self] eventData in
-            guard let self = self else { return }
-            print("[AudioGraphManager] TTS 'completion' event fired! Data: \(String(describing: eventData))")
+        let finishedResult = Switchboard.addEventListener("ttsNode", eventName: "finished") { [weak self] eventData in
+            guard let self = self, self.isSpeaking else { return }
+            print("[AudioGraphManager] TTS 'finished' event fired")
+            self.isSpeaking = false
             DispatchQueue.main.async {
-                // Process next item in queue
-                self.processNextInQueue()
+                self.delegate?.audioGraphManager(self, didChangeState: "idle")
+                self.delegate?.audioGraphManagerDidFinishSpeaking(self)
             }
         }
 
-        if let listenerId = completionResult.value {
-            ttsCompletionListenerId = listenerId
-            print("[AudioGraphManager] TTS 'completion' listener added with ID: \(listenerId)")
-        } else if let error = completionResult.error {
-            print("[AudioGraphManager] Failed to add TTS 'completion' listener: \(error.localizedDescription)")
-            throw AudioGraphError.listenerSetupFailed(error.localizedDescription)
+        if let listenerId = finishedResult.value {
+            ttsFinishedListenerId = listenerId
+            print("[AudioGraphManager] TTS 'finished' listener added with ID: \(listenerId)")
+        } else if let error = finishedResult.error {
+            print("[AudioGraphManager] Failed to add TTS 'finished' listener: \(error.localizedDescription)")
+        }
+
+        let synthesisStartedResult = Switchboard.addEventListener("ttsNode", eventName: "synthesisStarted") { [weak self] eventData in
+            guard let self = self else { return }
+            print("[AudioGraphManager] TTS 'synthesisStarted' event fired")
+        }
+
+        if let listenerId = synthesisStartedResult.value {
+            ttsSynthesisStartedListenerId = listenerId
+            print("[AudioGraphManager] TTS 'synthesisStarted' listener added with ID: \(listenerId)")
+        } else if let error = synthesisStartedResult.error {
+            print("[AudioGraphManager] Failed to add TTS 'synthesisStarted' listener: \(error.localizedDescription)")
         }
     }
 
     /// Remove TTS event listeners
     private func removeTTSEventListeners() {
-        if let listenerId = ttsCompletionListenerId {
+        if let listenerId = ttsFinishedListenerId {
             Switchboard.removeEventListener("ttsNode", listenerID: listenerId)
-            ttsCompletionListenerId = nil
-            print("[AudioGraphManager] TTS completion listener removed")
+            ttsFinishedListenerId = nil
+            print("[AudioGraphManager] TTS 'finished' listener removed")
+        }
+
+        if let listenerId = ttsSynthesisStartedListenerId {
+            Switchboard.removeEventListener("ttsNode", listenerID: listenerId)
+            ttsSynthesisStartedListenerId = nil
+            print("[AudioGraphManager] TTS 'synthesisStarted' listener removed")
         }
     }
 
