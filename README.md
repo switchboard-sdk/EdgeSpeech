@@ -1,4 +1,4 @@
-# Switchboard Voice for React Native
+# LCL-Speech: Switchboard for Voice AI for React Native
 
 **On-device voice processing for React Native apps. Work entirely in text.**
 
@@ -300,7 +300,7 @@ flowchart TB
 
 ## Get Switchboard Credentials
 
-1. Sign up at [switchboard.audio](https://switchboard.audio/)
+1. Sign up at [switchboard.audio](https://console.switchboard.audio/register)
 2. Create a new app in the dashboard
 3. Copy your App ID and App Secret
 
