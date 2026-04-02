@@ -19,6 +19,9 @@ android/
 # Environment variables (contains credentials)
 .env
 
+# Local Xcode node path override
+.xcode.env.local
+
 # Logs
 *.log
 npm-debug.log*
