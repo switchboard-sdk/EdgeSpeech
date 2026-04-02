@@ -5,9 +5,9 @@ The app has two sections: **Voice Input** for transcription (tap "Start Listenin
 ## Prerequisites
 
 - Node.js 20+
-- Xcode 15+
+- Xcode 16.1+
 - Physical iOS device (microphone required for voice features)
-- Switchboard SDK credentials ([sign up here](https://switchboard.audio/))
+- Switchboard SDK credentials ([sign up here](https://console.switchboard.audio/register))
 
 ## Setup
 
