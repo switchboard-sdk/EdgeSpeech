@@ -3,14 +3,14 @@ require 'json'
 package = JSON.parse(File.read(File.join(__dir__, 'package.json')))
 
 Pod::Spec.new do |s|
-  s.name         = "switchboard-voice-rn"
+  s.name         = "edgespeech"
   s.version      = package['version']
   s.summary      = package['description']
   s.homepage     = package['homepage']
   s.license      = package['license']
   s.authors      = package['author']
   s.platforms    = { :ios => "13.4" }
-  s.source       = { :git => package['repository']['url'], :tag => "v#{s.version}" }
+  s.source       = { :git => "git@github.com:switchboard-sdk/EdgeSpeech.git", :tag => "v#{s.version}" }
   s.static_framework = true
 
   s.dependency 'ExpoModulesCore'

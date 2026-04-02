@@ -18,10 +18,10 @@ Most developers just want to send text to an LLM and speak the response.
 
 ## The Solution
 
-Switchboard Voice abstracts all audio complexity into a text-based interface:
+EdgeSpeech abstracts all audio complexity into a text-based interface:
 
 ```typescript
-import { SwitchboardVoiceModule, initialize, start, speak } from 'switchboard-voice-rn';
+import { SwitchboardVoiceModule, initialize, start, speak } from '@synervoz/edgespeech';
 
 initialize('YOUR_APP_ID', 'YOUR_APP_SECRET');
 
@@ -57,7 +57,7 @@ Consider a voice AI assistant handling 1,000 conversations per day, each lasting
 | **1,000 conversations/day** | | **$3,600/day** |
 | **Monthly (30 days)** | | **$108,000** |
 
-**This library + ChatGPT API (text only):**
+**EdgeSpeech + ChatGPT API (text only):**
 | Component | Calculation | Cost |
 |-----------|-------------|------|
 | Text input | ~750 tokens × $5/1M | $0.004 |
@@ -68,7 +68,7 @@ Consider a voice AI assistant handling 1,000 conversations per day, each lasting
 
 ### The Savings
 
-| Metric | Realtime API | This Library + Text API |
+| Metric | Realtime API | EdgeSpeech + Text API |
 |--------|--------------|------------------------|
 | Cost per conversation | $3.60 | $0.02 |
 | Daily cost (1K convos) | $3,600 | $20 |
@@ -97,7 +97,7 @@ Consider a voice AI assistant handling 1,000 conversations per day, each lasting
 ## Installation
 
 ```bash
-npm install switchboard-voice-rn
+npm install @synervoz/edgespeech
 ```
 
 ### iOS Setup
@@ -125,7 +125,7 @@ import {
   start,
   speak,
   requestMicrophonePermission,
-} from 'switchboard-voice-rn';
+} from '@synervoz/edgespeech';
 
 // 1. Initialize with your Switchboard credentials
 initialize('YOUR_SWITCHBOARD_APP_ID', 'YOUR_SWITCHBOARD_APP_SECRET');
@@ -166,7 +166,7 @@ await speak('Hello! How can I help you today?');
 ### Configuration
 
 ```typescript
-await SwitchboardVoice.configure({
+await EdgeSpeech.configure({
   appId: string,           // Required: Switchboard app ID
   appSecret: string,       // Required: Switchboard app secret
   sttModel?: string,       // Optional: STT model (default: 'whisper-base-en')
@@ -225,7 +225,7 @@ flowchart TB
     mic["🎤 Microphone"]
     spk["🔊 Speaker"]
 
-    subgraph Engines["LCL-speech"]
+    subgraph Engines["EdgeSpeech"]
         subgraph JS["JavaScript API"]
             subgraph Controls["Controls"]
                 start["start()"]
@@ -312,4 +312,4 @@ MIT
 
 - [Switchboard SDK Documentation](https://docs.switchboard.audio/)
 - [Example App](./example/)
-- [GitHub Issues](https://github.com/switchboard-sdk/switchboard-voice-rn/issues)
+- [GitHub Issues](https://github.com/switchboard-sdk/EdgeSpeech/issues)

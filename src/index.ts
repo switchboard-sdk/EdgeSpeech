@@ -1,5 +1,5 @@
 /**
- * switchboard-voice-rn
+ * edgespeech
  *
  * React Native library for on-device voice processing with Switchboard SDK.
  * Provides VAD, STT, and TTS through a simple JavaScript callback interface.
@@ -11,7 +11,7 @@
 export { default as SwitchboardVoiceModule } from './SwitchboardVoiceModule'
 
 // Export the high-level wrapper API
-export { SwitchboardVoice } from './SwitchboardVoice'
+export { EdgeSpeech } from './EdgeSpeech'
 
 // Export convenience functions that delegate to the native module
 import SwitchboardVoiceModule from './SwitchboardVoiceModule'

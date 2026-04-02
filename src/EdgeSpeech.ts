@@ -10,7 +10,7 @@ import type {
 } from './types'
 
 /**
- * SwitchboardVoice - Main API for on-device voice processing
+ * EdgeSpeech - Main API for on-device voice processing
  *
  * Provides a simple event-based interface for Voice Activity Detection (VAD),
  * Speech-to-Text (STT), and Text-to-Speech (TTS) using the Switchboard SDK.
@@ -18,24 +18,24 @@ import type {
  * @example
  * ```typescript
  * // Configure
- * await SwitchboardVoice.configure({
+ * await EdgeSpeech.configure({
  *   appId: 'YOUR_APP_ID',
  *   appSecret: 'YOUR_APP_SECRET',
  * });
  *
  * // Set up event handlers
- * SwitchboardVoice.onTranscript = (text, isFinal) => {
+ * EdgeSpeech.onTranscript = (text, isFinal) => {
  *   console.log('Transcript:', text, 'Final:', isFinal);
  * };
  *
  * // Start listening
- * await SwitchboardVoice.start();
+ * await EdgeSpeech.start();
  *
  * // Speak response
- * await SwitchboardVoice.speak('Hello world');
+ * await EdgeSpeech.speak('Hello world');
  * ```
  */
-class SwitchboardVoiceAPI {
+class EdgeSpeechAPI {
   private _isConfigured = false
   private _currentState: VoiceState = 'idle'
   private _onTranscript: TranscriptCallback | null = null
@@ -56,7 +56,7 @@ class SwitchboardVoiceAPI {
   }
 
   /**
-   * Configure SwitchboardVoice with app credentials and optional settings
+   * Configure EdgeSpeech with app credentials and optional settings
    *
    * @param config - Configuration object
    * @throws Error if required parameters are missing or invalid
@@ -157,7 +157,7 @@ class SwitchboardVoiceAPI {
   }
 
   /**
-   * Check if SwitchboardVoice has been configured
+   * Check if EdgeSpeech has been configured
    */
   get isConfigured(): boolean {
     return this._isConfigured
@@ -201,14 +201,14 @@ class SwitchboardVoiceAPI {
 
   private _ensureConfigured(): void {
     if (!this._isConfigured) {
-      throw new Error('SwitchboardVoice must be configured before use')
+      throw new Error('EdgeSpeech must be configured before use')
     }
   }
 
   private _setupEventListeners(): void {
     // Check if module and addListener are available
     if (!SwitchboardVoiceModule || typeof SwitchboardVoiceModule.addListener !== 'function') {
-      console.warn('[SwitchboardVoice] Native module not available or missing addListener')
+      console.warn('[EdgeSpeech] Native module not available or missing addListener')
       return
     }
 
@@ -276,4 +276,4 @@ class SwitchboardVoiceAPI {
 }
 
 // Export singleton instance
-export const SwitchboardVoice = new SwitchboardVoiceAPI()
+export const EdgeSpeech = new EdgeSpeechAPI()

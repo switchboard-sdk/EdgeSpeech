@@ -15,7 +15,7 @@
     "expo-status-bar": "~3.0.9",
     "react": "19.1.0",
     "react-native": "0.81.5",
-    "switchboard-voice-rn": "file:.."
+    "@synervoz/edgespeech": "file:.."
   },
   "devDependencies": {
     "@types/react": "~19.1.0",

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Postinstall script for switchboard-voice-rn
+ * Postinstall script for edgespeech
  * Downloads Switchboard SDK frameworks from S3
  */
 

@@ -23,7 +23,7 @@ if (Array.isArray(config.resolver.blockList)) {
 
 // Map the local package to the parent directory
 config.resolver.extraNodeModules = config.resolver.extraNodeModules || {};
-config.resolver.extraNodeModules['switchboard-voice-rn'] = workspaceRoot;
+config.resolver.extraNodeModules['@synervoz/edgespeech'] = workspaceRoot;
 
 // Ensure react-native and other deps resolve from example's node_modules
 const exampleNodeModules = path.resolve(projectRoot, 'node_modules');

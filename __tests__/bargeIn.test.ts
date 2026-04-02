@@ -1,4 +1,4 @@
-import { SwitchboardVoice } from '../src/SwitchboardVoice';
+import { EdgeSpeech } from '../src/EdgeSpeech';
 import SwitchboardVoiceModule from '../src/SwitchboardVoiceModule';
 import type { VoiceConfig } from '../src/types';
 
@@ -33,7 +33,7 @@ describe('Barge-in (interruption handling)', () => {
     Object.keys(eventListeners).forEach((key) => {
       eventListeners[key] = [];
     });
-    (SwitchboardVoice as any)._cleanup();
+    (EdgeSpeech as any)._cleanup();
 
     // Wire addListener to capture callbacks
     jest.mocked(SwitchboardVoiceModule.addListener).mockImplementation(
@@ -52,9 +52,9 @@ describe('Barge-in (interruption handling)', () => {
   });
 
   it('invokes onInterrupted callback when native onInterrupted event fires', async () => {
-    await SwitchboardVoice.configure(baseConfig);
+    await EdgeSpeech.configure(baseConfig);
     const handler = jest.fn();
-    SwitchboardVoice.onInterrupted = handler;
+    EdgeSpeech.onInterrupted = handler;
 
     fireNativeEvent('onInterrupted');
 
@@ -62,20 +62,20 @@ describe('Barge-in (interruption handling)', () => {
   });
 
   it('does not throw when onInterrupted fires with no callback set', async () => {
-    await SwitchboardVoice.configure(baseConfig);
-    SwitchboardVoice.onInterrupted = null;
+    await EdgeSpeech.configure(baseConfig);
+    EdgeSpeech.onInterrupted = null;
 
     expect(() => fireNativeEvent('onInterrupted')).not.toThrow();
   });
 
   it('updates currentState via onStateChange: speaking → listening after interruption', async () => {
-    await SwitchboardVoice.configure(baseConfig);
+    await EdgeSpeech.configure(baseConfig);
 
     fireNativeEvent('onStateChange', { state: 'speaking' });
-    expect(SwitchboardVoice.currentState).toBe('speaking');
+    expect(EdgeSpeech.currentState).toBe('speaking');
 
     // Native emits listening state after barge-in stops TTS
     fireNativeEvent('onStateChange', { state: 'listening' });
-    expect(SwitchboardVoice.currentState).toBe('listening');
+    expect(EdgeSpeech.currentState).toBe('listening');
   });
 });

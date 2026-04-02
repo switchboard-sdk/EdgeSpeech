@@ -2,6 +2,6 @@
   "platforms": ["apple"],
   "apple": {
     "modules": ["SwitchboardVoiceModule"],
-    "podspecPath": "./switchboard-voice-rn.podspec"
+    "podspecPath": "./edgespeech.podspec"
   }
 }

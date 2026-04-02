@@ -23,8 +23,8 @@ import {
   speak,
   stopSpeaking,
   requestMicrophonePermission,
-} from 'switchboard-voice-rn';
-import type { VoiceState, TranscriptEvent, StateChangeEvent } from 'switchboard-voice-rn';
+} from '@synervoz/edgespeech';
+import type { VoiceState, TranscriptEvent, StateChangeEvent } from '@synervoz/edgespeech';
 
 // ErrorEvent type for the example
 interface ErrorEvent {
@@ -49,7 +49,7 @@ function App(): React.JSX.Element {
   const [transcript, setTranscript] = useState('');
   const [transcriptHistory, setTranscriptHistory] = useState<TranscriptHistoryEvent[]>([]);
   const [voiceState, setVoiceState] = useState<VoiceState>('idle');
-  const [textToSpeak, setTextToSpeak] = useState('Hello from Switchboard Voice!');
+  const [textToSpeak, setTextToSpeak] = useState('Hello from EdgeSpeech!');
   const [conversationMode, setConversationMode] = useState(false);
   const [conversationHistory, setConversationHistory] = useState<ConversationMessage[]>([]);
   const [isThinking, setIsThinking] = useState(false);
@@ -261,7 +261,7 @@ function App(): React.JSX.Element {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" />
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        <Text style={styles.title}>Switchboard Voice (Expo)</Text>
+        <Text style={styles.title}>EdgeSpeech</Text>
 
         {/* Status Indicator */}
         <View style={styles.statusContainer}>
@@ -411,7 +411,7 @@ function App(): React.JSX.Element {
         </View>
 
         <Text style={styles.footer}>
-          Powered by Switchboard SDK (Expo Module)
+          Powered by EdgeSpeech
         </Text>
       </ScrollView>
     </SafeAreaView>

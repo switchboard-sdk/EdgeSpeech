@@ -1,9 +1,26 @@
 {
-  "name": "switchboard-voice-rn",
+  "name": "@synervoz/edgespeech",
   "version": "0.1.0",
   "description": "React Native library for on-device voice processing with Switchboard SDK",
-  "main": "src/index.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "ios/*.swift",
+    "edgespeech.podspec",
+    "expo-module.config.json",
+    "scripts/postinstall.js",
+    "README.md"
+  ],
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
     "postinstall": "node scripts/postinstall.js",
     "test": "jest",
     "test:integration": "jest --config jest.integration.config.js",
@@ -19,26 +36,25 @@
     "stt",
     "tts",
     "vad",
-    "switchboard",
-    "whisper"
+    "edgespeech",
+    "whisper",
+    "on-device"
   ],
-  "author": "",
+  "author": "Thom Leigh",
   "license": "MIT",
-  "homepage": "https://github.com/switchboard-sdk/switchboard-voice-rn#readme",
+  "publishConfig": {
+    "access": "public"
+  },
+  "homepage": "https://github.com/switchboard-sdk/EdgeSpeech#readme",
   "repository": {
     "type": "git",
-    "url": "https://github.com/switchboard-sdk/switchboard-voice-rn.git"
+    "url": "git@github.com:switchboard-sdk/EdgeSpeech.git"
   },
   "peerDependencies": {
     "expo": ">=51.0.0",
+    "expo-modules-core": ">=2.0.0",
     "react": ">=18.0.0",
     "react-native": ">=0.74.0"
-  },
-  "dependencies": {
-    "expo-modules-core": ">=2.0.0",
-    "expo": "~54.0.32",
-    "react": "19.1.0",
-    "react-native": "0.81.5"
   },
   "devDependencies": {
     "@react-native/babel-preset": "^0.76.0",
@@ -48,8 +64,12 @@
     "@types/react": "~19.1.10",
     "@types/jest": "^29.5.0",
     "eslint": "^8.57.1",
+    "expo": "~54.0.32",
+    "expo-modules-core": ">=2.0.0",
     "jest": "^29.6.3",
     "prettier": "^2.8.8",
+    "react": "19.1.0",
+    "react-native": "0.81.5",
     "typescript": "^5.0.4"
   },
   "codegenConfig": {

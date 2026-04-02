@@ -1,4 +1,4 @@
-import { SwitchboardVoice } from '../src/SwitchboardVoice';
+import { EdgeSpeech } from '../src/EdgeSpeech';
 import type { VoiceConfig, VoiceState, VoiceError } from '../src/types';
 
 // Mock the native module (SwitchboardVoiceModule uses expo-modules-core, so mock it directly)
@@ -16,11 +16,11 @@ jest.mock('../src/SwitchboardVoiceModule', () => ({
   },
 }));
 
-describe('SwitchboardVoice', () => {
+describe('EdgeSpeech', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     // Reset the singleton state between tests
-    (SwitchboardVoice as any)._cleanup();
+    (EdgeSpeech as any)._cleanup();
   });
 
   describe('configure()', () => {
@@ -29,7 +29,7 @@ describe('SwitchboardVoice', () => {
         appSecret: 'test-secret',
       } as VoiceConfig;
 
-      await expect(SwitchboardVoice.configure(config)).rejects.toThrow(
+      await expect(EdgeSpeech.configure(config)).rejects.toThrow(
         'appId is required'
       );
     });
@@ -39,7 +39,7 @@ describe('SwitchboardVoice', () => {
         appId: 'test-id',
       } as VoiceConfig;
 
-      await expect(SwitchboardVoice.configure(config)).rejects.toThrow(
+      await expect(EdgeSpeech.configure(config)).rejects.toThrow(
         'appSecret is required'
       );
     });
@@ -50,7 +50,7 @@ describe('SwitchboardVoice', () => {
         appSecret: 'test-secret',
       };
 
-      await expect(SwitchboardVoice.configure(config)).resolves.toBeUndefined();
+      await expect(EdgeSpeech.configure(config)).resolves.toBeUndefined();
     });
 
     it('should accept optional parameters', async () => {
@@ -62,7 +62,7 @@ describe('SwitchboardVoice', () => {
         vadSensitivity: 0.7,
       };
 
-      await expect(SwitchboardVoice.configure(config)).resolves.toBeUndefined();
+      await expect(EdgeSpeech.configure(config)).resolves.toBeUndefined();
     });
 
     it('should validate vadSensitivity range', async () => {
@@ -72,7 +72,7 @@ describe('SwitchboardVoice', () => {
         vadSensitivity: 1.5, // Invalid: > 1.0
       };
 
-      await expect(SwitchboardVoice.configure(config)).rejects.toThrow(
+      await expect(EdgeSpeech.configure(config)).rejects.toThrow(
         'vadSensitivity must be between 0.0 and 1.0'
       );
     });
@@ -80,8 +80,8 @@ describe('SwitchboardVoice', () => {
 
   describe('start()', () => {
     it('should throw error if not configured', async () => {
-      await expect(SwitchboardVoice.start()).rejects.toThrow(
-        'SwitchboardVoice must be configured before use'
+      await expect(EdgeSpeech.start()).rejects.toThrow(
+        'EdgeSpeech must be configured before use'
       );
     });
 
@@ -91,8 +91,8 @@ describe('SwitchboardVoice', () => {
         appSecret: 'test-secret',
       };
 
-      await SwitchboardVoice.configure(config);
-      await expect(SwitchboardVoice.start()).resolves.toBeUndefined();
+      await EdgeSpeech.configure(config);
+      await expect(EdgeSpeech.start()).resolves.toBeUndefined();
     });
   });
 
@@ -103,16 +103,16 @@ describe('SwitchboardVoice', () => {
         appSecret: 'test-secret',
       };
 
-      await SwitchboardVoice.configure(config);
-      await SwitchboardVoice.start();
-      await expect(SwitchboardVoice.stop()).resolves.toBeUndefined();
+      await EdgeSpeech.configure(config);
+      await EdgeSpeech.start();
+      await expect(EdgeSpeech.stop()).resolves.toBeUndefined();
     });
   });
 
   describe('speak()', () => {
     it('should throw error if not configured', async () => {
-      await expect(SwitchboardVoice.speak('hello')).rejects.toThrow(
-        'SwitchboardVoice must be configured before use'
+      await expect(EdgeSpeech.speak('hello')).rejects.toThrow(
+        'EdgeSpeech must be configured before use'
       );
     });
 
@@ -122,8 +122,8 @@ describe('SwitchboardVoice', () => {
         appSecret: 'test-secret',
       };
 
-      await SwitchboardVoice.configure(config);
-      await expect(SwitchboardVoice.speak('')).rejects.toThrow(
+      await EdgeSpeech.configure(config);
+      await expect(EdgeSpeech.speak('')).rejects.toThrow(
         'Text cannot be empty'
       );
     });
@@ -134,8 +134,8 @@ describe('SwitchboardVoice', () => {
         appSecret: 'test-secret',
       };
 
-      await SwitchboardVoice.configure(config);
-      await expect(SwitchboardVoice.speak('Hello world')).resolves.toBeUndefined();
+      await EdgeSpeech.configure(config);
+      await expect(EdgeSpeech.speak('Hello world')).resolves.toBeUndefined();
     });
   });
 
@@ -146,42 +146,42 @@ describe('SwitchboardVoice', () => {
         appSecret: 'test-secret',
       };
 
-      await SwitchboardVoice.configure(config);
-      await SwitchboardVoice.speak('Hello world');
-      await expect(SwitchboardVoice.stopSpeaking()).resolves.toBeUndefined();
+      await EdgeSpeech.configure(config);
+      await EdgeSpeech.speak('Hello world');
+      await expect(EdgeSpeech.stopSpeaking()).resolves.toBeUndefined();
     });
   });
 
   describe('Event handlers', () => {
     it('should allow setting onTranscript callback', async () => {
       const callback = jest.fn();
-      SwitchboardVoice.onTranscript = callback;
-      expect(SwitchboardVoice.onTranscript).toBe(callback);
+      EdgeSpeech.onTranscript = callback;
+      expect(EdgeSpeech.onTranscript).toBe(callback);
     });
 
     it('should allow setting onStateChange callback', async () => {
       const callback = jest.fn();
-      SwitchboardVoice.onStateChange = callback;
-      expect(SwitchboardVoice.onStateChange).toBe(callback);
+      EdgeSpeech.onStateChange = callback;
+      expect(EdgeSpeech.onStateChange).toBe(callback);
     });
 
     it('should allow setting onInterrupted callback', async () => {
       const callback = jest.fn();
-      SwitchboardVoice.onInterrupted = callback;
-      expect(SwitchboardVoice.onInterrupted).toBe(callback);
+      EdgeSpeech.onInterrupted = callback;
+      expect(EdgeSpeech.onInterrupted).toBe(callback);
     });
 
     it('should allow setting onError callback', async () => {
       const callback = jest.fn();
-      SwitchboardVoice.onError = callback;
-      expect(SwitchboardVoice.onError).toBe(callback);
+      EdgeSpeech.onError = callback;
+      expect(EdgeSpeech.onError).toBe(callback);
     });
   });
 
   describe('requestMicrophonePermission()', () => {
     it('should request microphone permission', async () => {
       await expect(
-        SwitchboardVoice.requestMicrophonePermission()
+        EdgeSpeech.requestMicrophonePermission()
       ).resolves.toBe(true);
     });
   });
