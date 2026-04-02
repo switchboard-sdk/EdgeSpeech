@@ -1,6 +1,6 @@
 # EdgeSpeech Example App
 
-Example app demonstrating the `@synervoz/edgespeech` library using Expo Modules Core.
+The app has two sections: **Voice Input** for transcription (tap "Start Listening", speak, watch the transcript appear) and **Text-to-Speech** (type text, tap "Speak"). Enable **Conversation Mode** to wire them together automatically: speech is transcribed, sent to an LLM, and the response is spoken back.
 
 ## Prerequisites
 
@@ -32,20 +32,3 @@ Edit `.env` with your Switchboard App ID and App Secret.
 npx expo run:ios --device
 ```
 
-## Architecture
-
-- `App.tsx` — Main app component with voice UI
-- The `@synervoz/edgespeech` library is linked locally via `"file:.."` in `package.json`
-
-### Event Pattern
-
-```typescript
-import { SwitchboardVoiceModule } from '@synervoz/edgespeech';
-
-const subscription = SwitchboardVoiceModule.addListener('onTranscript', (event) => {
-  console.log(event.text, event.isFinal);
-});
-
-// Cleanup
-subscription.remove();
-```
