@@ -1,36 +1,15 @@
-# EdgeSpeech: Switchboard for Voice AI for React Native
+# EdgeSpeech
 
-**On-device voice processing for React Native apps. Work entirely in text.**
-
-Build voice AI applications without digging deep into low-level audio. This library handles Voice Activity Detection (VAD), Speech-to-Text (STT), and Text-to-Speech (TTS) entirely on-device using the [Switchboard SDK](https://switchboard.audio/), giving you simple text callbacks to work with.
-
-## The Problem
-
-Building voice AI is complex. You need to:
-- Capture and process audio streams
-- Detect when users start and stop speaking
-- Convert speech to text
-- Generate speech from text
-- Handle interruptions ("barge-in")
-- Manage audio sessions, permissions, and device quirks
-
-Most developers just want to send text to an LLM and speak the response.
-
-## The Solution
-
-EdgeSpeech abstracts all audio complexity into a text-based interface:
+Web developers can add listening, speaking, or both to a React Native app with EdgeSpeech, without writing any native audio code. Voice Activity Detection, Speech-to-Text, and Text-to-Speech all run on-device through the [Switchboard SDK](https://switchboard.audio/). Your JavaScript works entirely with text.
 
 ```typescript
 import { SwitchboardVoiceModule, initialize, start, speak } from '@synervoz/edgespeech';
 
 initialize('YOUR_APP_ID', 'YOUR_APP_SECRET');
 
-// Get transcripts as text
 SwitchboardVoiceModule.addListener('onTranscript', async ({ text, isFinal }) => {
   if (isFinal) {
-    // Send to your LLM
     const response = await chat(text);
-    // Speak the response
     await speak(response);
   }
 });
@@ -38,7 +17,7 @@ SwitchboardVoiceModule.addListener('onTranscript', async ({ text, isFinal }) => 
 await start();
 ```
 
-That's it. No audio buffers, no sample rates, no codecs.
+The [example app](./example/) shows the complete voice loop running end-to-end.
 
 ## Cost Savings: 99% Cheaper Than Cloud Speech-to-Speech
 
@@ -66,33 +45,7 @@ Consider a voice AI assistant handling 1,000 conversations per day, each lasting
 | **1,000 conversations/day** | | **$20/day** |
 | **Monthly (30 days)** | | **$600** |
 
-### The Savings
 
-| Metric | Realtime API | EdgeSpeech + Text API |
-|--------|--------------|------------------------|
-| Cost per conversation | $3.60 | $0.02 |
-| Daily cost (1K convos) | $3,600 | $20 |
-| Monthly cost | $108,000 | $600 |
-| **Annual savings** | - | **$1,288,800** |
-
-**On-device STT/TTS with a text-based LLM API is 1/180th the price of cloud speech-to-speech.**
-
-### Why This Works
-
-1. **Audio tokens are expensive** - Cloud APIs charge premium rates for audio processing
-2. **Text is cheap** - LLM APIs charge a fraction of the cost for text
-3. **On-device is free** - Switchboard SDK runs locally with no per-request costs
-4. **Same quality** - Whisper STT and Silero TTS are production-grade models
-
-## Features
-
-- **Voice Activity Detection (VAD)** - Silero VAD detects speech start/end automatically
-- **Speech-to-Text (STT)** - Whisper runs on-device for fast, private transcription
-- **Text-to-Speech (TTS)** - Silero TTS generates natural speech locally
-- **Interruption handling** - Barge-in support stops TTS when user speaks
-- **Simple API** - Text in, text out. No audio knowledge required.
-- **Privacy** - All processing happens on-device. No audio leaves the phone.
-- **Offline capable** - Works without internet (except for your LLM calls)
 
 ## Installation
 
@@ -276,14 +229,6 @@ flowchart TB
     style SpeakingGraph fill:#fff,stroke:#999,stroke-dasharray: 5 5
 ```
 
-## Why Switchboard?
-
-[Switchboard SDK](https://switchboard.audio/) is a professional audio processing toolkit used in production apps. It provides:
-
-- **Optimized audio graphs** - Efficient on-device audio processing pipelines
-- **Production-ready models** - Whisper, Silero VAD, and Silero TTS tuned for mobile
-- **Low latency** - Real-time processing suitable for conversational AI
-- **Battery efficient** - Designed for sustained use on mobile devices
 
 ## Platform Support
 
