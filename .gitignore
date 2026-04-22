@@ -13,6 +13,9 @@ build/
 vendor/bundle/
 tmp/
 
+# Created by post install
+ios/
+
 # Credentials
 example/credentials.ts
 
