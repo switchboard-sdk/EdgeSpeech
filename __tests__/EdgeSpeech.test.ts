@@ -1,5 +1,5 @@
 import { EdgeSpeech } from '../src/EdgeSpeech'
-import type { VoiceConfig, VoiceState, VoiceError } from '../src/types'
+import type { VoiceConfig } from '../src/types'
 
 // Mock the native module (SwitchboardVoiceModule uses expo-modules-core, so mock it directly)
 jest.mock('../src/SwitchboardVoiceModule', () => ({
