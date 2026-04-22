@@ -1,0 +1,15 @@
+external/
+node_modules/
+.DS_Store
+*.log
+dist/
+libs/
+Frameworks/
+*.xcworkspace
+*.xcuserdata
+Pods/
+build/
+.bundle/
+vendor/bundle/
+tmp/
+ios/
