@@ -24,8 +24,9 @@
     "postinstall": "node scripts/postinstall.js",
     "test": "jest",
     "test:integration": "jest --config jest.integration.config.js",
+    "format": "prettier --write .",
     "lint": "eslint . --fix",
-    "typecheck": "tsc --noEmit",
+    "check": "tsc --noEmit",
     "android": "expo run:android",
     "ios": "expo run:ios"
   },
