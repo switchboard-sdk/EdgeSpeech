@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+
 - Initial project scaffolding
 - TurboModule architecture for React Native bridge
 - iOS native module setup
@@ -16,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.0] - TBD
 
 ### Added
+
 - On-device VAD (Voice Activity Detection) with Silero VAD
 - On-device STT (Speech-to-Text) with Whisper
 - On-device TTS (Text-to-Speech) with Silero

@@ -50,7 +50,9 @@ class EdgeSpeechAPI {
   }
 
   private _ensureListenersSetup(): void {
-    if (this._listenersSetup) {return}
+    if (this._listenersSetup) {
+      return
+    }
     this._setupEventListeners()
     this._listenersSetup = true
   }
@@ -236,25 +238,19 @@ class EdgeSpeechAPI {
     this._subscriptions.push(stateChangeSub)
 
     // Interruption events
-    const interruptedSub = SwitchboardVoiceModule.addListener(
-      'onInterrupted',
-      () => {
-        if (this._onInterrupted) {
-          this._onInterrupted()
-        }
+    const interruptedSub = SwitchboardVoiceModule.addListener('onInterrupted', () => {
+      if (this._onInterrupted) {
+        this._onInterrupted()
       }
-    )
+    })
     this._subscriptions.push(interruptedSub)
 
     // Error events
-    const errorSub = SwitchboardVoiceModule.addListener(
-      'onError',
-      (error: VoiceError) => {
-        if (this._onError) {
-          this._onError(error)
-        }
+    const errorSub = SwitchboardVoiceModule.addListener('onError', (error: VoiceError) => {
+      if (this._onError) {
+        this._onError(error)
       }
-    )
+    })
     this._subscriptions.push(errorSub)
   }
 
