@@ -3,18 +3,18 @@
 Web developers can add listening, speaking, or both to a React Native app with EdgeSpeech, without writing any native audio code. Voice Activity Detection, Speech-to-Text, and Text-to-Speech all run on-device through the [Switchboard SDK](https://switchboard.audio/). Your JavaScript works entirely with text.
 
 ```typescript
-import { SwitchboardVoiceModule, initialize, start, speak } from '@synervoz/edgespeech';
+import { SwitchboardVoiceModule, initialize, start, speak } from '@synervoz/edgespeech'
 
-initialize('YOUR_APP_ID', 'YOUR_APP_SECRET');
+initialize('YOUR_APP_ID', 'YOUR_APP_SECRET')
 
 SwitchboardVoiceModule.addListener('onTranscript', async ({ text, isFinal }) => {
   if (isFinal) {
-    const response = await chat(text);
-    await speak(response);
+    const response = await chat(text)
+    await speak(response)
   }
-});
+})
 
-await start();
+await start()
 ```
 
 The [example app](./example/) shows the complete voice loop running end-to-end.
@@ -45,8 +45,6 @@ Consider a voice AI assistant handling 1,000 conversations per day, each lasting
 | **1,000 conversations/day** | | **$20/day** |
 | **Monthly (30 days)** | | **$600** |
 
-
-
 ## Installation
 
 ```bash
@@ -58,12 +56,14 @@ npm install @synervoz/edgespeech
 1. The Switchboard SDK frameworks are downloaded automatically on `npm install`.
 
 2. Add microphone permission to your `Info.plist`:
+
 ```xml
 <key>NSMicrophoneUsageDescription</key>
 <string>This app needs microphone access for voice input</string>
 ```
 
 3. Build your app:
+
 ```bash
 npx expo run:ios
 ```
@@ -78,40 +78,40 @@ import {
   start,
   speak,
   requestMicrophonePermission,
-} from '@synervoz/edgespeech';
+} from '@synervoz/edgespeech'
 
 // 1. Initialize with your Switchboard credentials
-initialize('YOUR_SWITCHBOARD_APP_ID', 'YOUR_SWITCHBOARD_APP_SECRET');
+initialize('YOUR_SWITCHBOARD_APP_ID', 'YOUR_SWITCHBOARD_APP_SECRET')
 
 // 2. (Optional) tune settings
-configure({ vadSensitivity: 0.5 });
+configure({ vadSensitivity: 0.5 })
 
 // 3. Set up event listeners
 SwitchboardVoiceModule.addListener('onTranscript', ({ text, isFinal }) => {
-  console.log(isFinal ? 'Final:' : 'Interim:', text);
-  if (isFinal) handleUserSpeech(text);
-});
+  console.log(isFinal ? 'Final:' : 'Interim:', text)
+  if (isFinal) handleUserSpeech(text)
+})
 
 SwitchboardVoiceModule.addListener('onStateChange', ({ state }) => {
-  console.log('State:', state); // 'idle' | 'listening' | 'speaking'
-});
+  console.log('State:', state) // 'idle' | 'listening' | 'speaking'
+})
 
 SwitchboardVoiceModule.addListener('onInterrupted', () => {
-  console.log('User interrupted playback');
-});
+  console.log('User interrupted playback')
+})
 
 SwitchboardVoiceModule.addListener('onError', ({ code, message }) => {
-  console.error('Voice error:', code, message);
-});
+  console.error('Voice error:', code, message)
+})
 
 // 4. Request permission and start
-const granted = await requestMicrophonePermission();
+const granted = await requestMicrophonePermission()
 if (granted) {
-  await start();
+  await start()
 }
 
 // 5. Speak responses
-await speak('Hello! How can I help you today?');
+await speak('Hello! How can I help you today?')
 ```
 
 ## API Reference
@@ -130,28 +130,28 @@ await EdgeSpeech.configure({
 
 ### Methods
 
-| Method | Description |
-|--------|-------------|
-| `configure(config)` | Initialize with credentials and settings |
-| `start()` | Start listening for voice input |
-| `stop()` | Stop listening |
-| `speak(text)` | Speak text using TTS |
-| `stopSpeaking()` | Stop current TTS playback |
-| `requestMicrophonePermission()` | Request microphone access |
+| Method                          | Description                              |
+| ------------------------------- | ---------------------------------------- |
+| `configure(config)`             | Initialize with credentials and settings |
+| `start()`                       | Start listening for voice input          |
+| `stop()`                        | Stop listening                           |
+| `speak(text)`                   | Speak text using TTS                     |
+| `stopSpeaking()`                | Stop current TTS playback                |
+| `requestMicrophonePermission()` | Request microphone access                |
 
 ### Events
 
 Listen via `SwitchboardVoiceModule.addListener(eventName, handler)`.
 
-| Event | Payload | Description |
-|-------|---------|-------------|
-| `onTranscript` | `{ text: string, isFinal: boolean }` | Speech recognized |
-| `onStateChange` | `{ state: string }` | State changed (`idle`, `listening`, `speaking`) |
-| `onSpeechStart` | `{}` | VAD detected voice activity |
-| `onSpeechEnd` | `{}` | VAD detected end of speech |
-| `onTTSComplete` | `{}` | TTS finished playing |
-| `onInterrupted` | `{}` | TTS interrupted by user speech |
-| `onError` | `{ code: string, message: string }` | Error occurred |
+| Event           | Payload                              | Description                                     |
+| --------------- | ------------------------------------ | ----------------------------------------------- |
+| `onTranscript`  | `{ text: string, isFinal: boolean }` | Speech recognized                               |
+| `onStateChange` | `{ state: string }`                  | State changed (`idle`, `listening`, `speaking`) |
+| `onSpeechStart` | `{}`                                 | VAD detected voice activity                     |
+| `onSpeechEnd`   | `{}`                                 | VAD detected end of speech                      |
+| `onTTSComplete` | `{}`                                 | TTS finished playing                            |
+| `onInterrupted` | `{}`                                 | TTS interrupted by user speech                  |
+| `onError`       | `{ code: string, message: string }`  | Error occurred                                  |
 
 ### States
 
@@ -229,13 +229,12 @@ flowchart TB
     style SpeakingGraph fill:#fff,stroke:#999,stroke-dasharray: 5 5
 ```
 
-
 ## Platform Support
 
-| Platform | Status |
-|----------|--------|
-| iOS | Supported |
-| Android | Coming soon |
+| Platform | Status      |
+| -------- | ----------- |
+| iOS      | Supported   |
+| Android  | Coming soon |
 
 ## Requirements
 

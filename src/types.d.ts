@@ -1,26 +1,26 @@
 /**
  * Voice processing states
  */
-export type VoiceState = 'idle' | 'listening' | 'processing' | 'speaking';
+export type VoiceState = 'idle' | 'listening' | 'processing' | 'speaking'
 
 /**
  * Configuration for SwitchboardVoice
  */
 export interface VoiceConfig {
   /** Switchboard app ID (required) */
-  appId: string;
+  appId: string
 
   /** Switchboard app secret (required) */
-  appSecret: string;
+  appSecret: string
 
   /** STT model to use (optional, default: 'whisper-base-en') */
-  sttModel?: string;
+  sttModel?: string
 
   /** TTS voice to use (optional, default: 'silero-en-us') */
-  ttsVoice?: string;
+  ttsVoice?: string
 
   /** VAD sensitivity (0.0-1.0, default: 0.5) */
-  vadSensitivity?: number;
+  vadSensitivity?: number
 }
 
 /**
@@ -28,13 +28,13 @@ export interface VoiceConfig {
  */
 export interface VoiceError {
   /** Error code */
-  code: string;
+  code: string
 
   /** Human-readable error message */
-  message: string;
+  message: string
 
   /** Optional additional error details */
-  details?: Record<string, unknown>;
+  details?: Record<string, unknown>
 }
 
 /**
@@ -42,10 +42,10 @@ export interface VoiceError {
  */
 export interface TranscriptEvent {
   /** Transcribed text */
-  text: string;
+  text: string
 
   /** Whether this is a final transcript */
-  isFinal: boolean;
+  isFinal: boolean
 }
 
 /**
@@ -53,28 +53,28 @@ export interface TranscriptEvent {
  */
 export interface StateChangeEvent {
   /** New voice state */
-  state: VoiceState;
+  state: VoiceState
 
   /** Previous voice state */
-  previousState: VoiceState;
+  previousState: VoiceState
 }
 
 /**
  * Callback type for transcript events
  */
-export type TranscriptCallback = (text: string, isFinal: boolean) => void;
+export type TranscriptCallback = (text: string, isFinal: boolean) => void
 
 /**
  * Callback type for state change events
  */
-export type StateChangeCallback = (state: VoiceState) => void;
+export type StateChangeCallback = (state: VoiceState) => void
 
 /**
  * Callback type for interruption events
  */
-export type InterruptedCallback = () => void;
+export type InterruptedCallback = () => void
 
 /**
  * Callback type for error events
  */
-export type ErrorCallback = (error: VoiceError) => void;
+export type ErrorCallback = (error: VoiceError) => void

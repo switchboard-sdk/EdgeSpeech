@@ -1,10 +1,12 @@
 MOST IMPORTANT: Don't make any assumptions without asking my opinion.
 
 ## Environment Requirements
+
 - **Node.js 20+** required (use `nvm use 20` before running npm/expo commands)
 - **Don't call `pod install` directly** - use `npx expo run:ios` instead (CocoaPods is deprecated in React Native)
 
 ## Process Management
+
 - Keep a log of your work in `PROGRESS.md` (session-based chronological log)
 - Maintain TODO list in `TODO.md` (task checklist organized by phase)
 - Don't work in /tmp, use ./tmp and git ignore it
@@ -24,6 +26,7 @@ Build a **React Native library** (npm package) that wraps Switchboard SDK's on-d
 **The primary deliverable is the React Native module** - not the example app. The example exists only to demonstrate how to use the module.
 
 **User workflow:**
+
 1. Clone this repo
 2. Run setup scripts (to download SDK frameworks)
 3. Build and run the example app to verify everything works
@@ -46,30 +49,32 @@ Voice AI developers work entirely in text. The library handles all audio complex
 - Simple JavaScript callbacks and methods
 
 ## Target API
+
 ```typescript
-import { SwitchboardVoice } from 'switchboard-voice-rn';
+import { SwitchboardVoice } from 'switchboard-voice-rn'
 
 // Configuration
 SwitchboardVoice.configure({
   sttModel: 'whisper-base-en',
   ttsVoice: 'silero-en-us',
   vadSensitivity: 0.5,
-});
+})
 
 // Event handlers
-SwitchboardVoice.onTranscript = (text: string, isFinal: boolean) => {};
-SwitchboardVoice.onInterrupted = () => {};
-SwitchboardVoice.onError = (error: VoiceError) => {};
-SwitchboardVoice.onStateChange = (state: VoiceState) => {};
+SwitchboardVoice.onTranscript = (text: string, isFinal: boolean) => {}
+SwitchboardVoice.onInterrupted = () => {}
+SwitchboardVoice.onError = (error: VoiceError) => {}
+SwitchboardVoice.onStateChange = (state: VoiceState) => {}
 
 // Actions
-await SwitchboardVoice.start();
-await SwitchboardVoice.stop();
-await SwitchboardVoice.speak(text);
-await SwitchboardVoice.stopSpeaking();
+await SwitchboardVoice.start()
+await SwitchboardVoice.stop()
+await SwitchboardVoice.speak(text)
+await SwitchboardVoice.stopSpeaking()
 ```
 
 ## Project Structure
+
 ```
 switchboard-voice-rn/
 ├── CLAUDE.md
@@ -111,6 +116,7 @@ switchboard-voice-rn/
 ## Reference Implementations
 
 ### Primary Reference: daw-react-native
+
 ```
 git@github.com:switchboard-sdk/daw-react-native.git
 ```
@@ -125,6 +131,7 @@ Use this as the structural reference for:
 Pull apart and adapt patterns from this codebase freely.
 
 ### Secondary Reference: voice-app-control-example-ios
+
 ```
 https://github.com/switchboard-sdk/voice-app-control-example-ios
 ```
@@ -139,27 +146,30 @@ Native iOS example showing VAD + Whisper STT pipeline. Key patterns:
 
 ### Node Types (SDK 3.1.0)
 
-| Extension | Node Type | Action |
-|-----------|-----------|--------|
-| SileroVAD | `SileroVAD.VAD` | - |
-| Whisper STT | `Whisper.STT` | `transcribe` (params: `start`, `end`) |
-| Sherpa TTS | `Sherpa.TTS` | `synthesize` (param: `text`) |
+| Extension   | Node Type       | Action                                |
+| ----------- | --------------- | ------------------------------------- |
+| SileroVAD   | `SileroVAD.VAD` | -                                     |
+| Whisper STT | `Whisper.STT`   | `transcribe` (params: `start`, `end`) |
+| Sherpa TTS  | `Sherpa.TTS`    | `synthesize` (param: `text`)          |
 
 Note: Engine type is `"Realtime"` (not `"RealTimeGraphRenderer"`).
 
 ### Event Names (IMPORTANT)
 
 For `SileroVAD.VAD` node:
+
 - **Events**: `speechStarted`, `speechEnded` (NOT `start`/`end`)
 - **Data connection format**: `vadNode.speechEnded` → `sttNode.transcribe`
 
 For `Whisper.STT` node:
+
 - **Events**: `transcription` (returns transcript text)
 - **Actions**: `transcribe` (params: `start`, `end` sample positions from VAD)
 
 The `speechEnded` event provides `start` and `end` timestamps that are automatically passed to the STT `transcribe` action via the data connection.
 
 ### Listening Graph (VAD → STT)
+
 ```json
 {
   "type": "Realtime",
@@ -174,7 +184,11 @@ The `speechEnded` event provides `start` and `end` timestamps that are automatic
         { "id": "multiChannelToMonoNode", "type": "MultiChannelToMono" },
         { "id": "busSplitterNode", "type": "BusSplitter" },
         { "id": "vadNode", "type": "SileroVAD.VAD", "config": { "minSilenceDurationMs": 100 } },
-        { "id": "sttNode", "type": "Whisper.STT", "config": { "initializeModel": true, "useGPU": true } }
+        {
+          "id": "sttNode",
+          "type": "Whisper.STT",
+          "config": { "initializeModel": true, "useGPU": true }
+        }
       ],
       "connections": [
         { "sourceNode": "inputNode", "destinationNode": "multiChannelToMonoNode" },
@@ -189,6 +203,7 @@ The `speechEnded` event provides `start` and `end` timestamps that are automatic
 ```
 
 ### TTS Graph
+
 ```json
 {
   "type": "Realtime",
@@ -199,12 +214,8 @@ The `speechEnded` event provides `start` and `end` timestamps that are automatic
         "sampleRate": 16000,
         "bufferSize": 512
       },
-      "nodes": [
-        { "id": "ttsNode", "type": "Sherpa.TTS", "config": { "voice": "en_GB" } }
-      ],
-      "connections": [
-        { "sourceNode": "ttsNode", "destinationNode": "outputNode" }
-      ]
+      "nodes": [{ "id": "ttsNode", "type": "Sherpa.TTS", "config": { "voice": "en_GB" } }],
+      "connections": [{ "sourceNode": "ttsNode", "destinationNode": "outputNode" }]
     }
   }
 }
@@ -251,6 +262,7 @@ The `speechEnded` event provides `start` and `end` timestamps that are automatic
 ## Key Behaviours
 
 ### State Machine
+
 ```
 idle → listening → processing → idle
                 ↘            ↗
@@ -285,6 +297,7 @@ Default: Queue sequential `speak()` calls. Play in order.
 - SwitchboardSilero (TTS) - verify extension name
 
 ### Initialization
+
 ```swift
 SBSwitchboardSDK.initialize(withAppID: "YOUR_APP_ID", appSecret: "YOUR_APP_SECRET")
 SBWhisperExtension.initialize(withConfig: [:])
