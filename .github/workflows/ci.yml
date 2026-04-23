@@ -7,8 +7,8 @@ on:
     branches: [main]
 
 jobs:
-  ci:
-    name: Lint, Type Check & Test
+  checks:
+    name: Checks
     runs-on: ubuntu-latest
 
     steps:
