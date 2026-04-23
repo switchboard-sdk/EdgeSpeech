@@ -19,6 +19,12 @@ jobs:
           node-version: '22'
           cache: 'npm'
 
+      - name: Cache iOS Frameworks
+        uses: actions/cache@v4
+        with:
+          path: ios/Frameworks
+          key: ios-frameworks-${{ hashFiles('scripts/postinstall.js') }}
+
       - name: Install dependencies
         run: npm ci
 
