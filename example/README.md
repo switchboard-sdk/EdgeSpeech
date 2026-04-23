@@ -31,4 +31,3 @@ Edit `.env` with your Switchboard App ID and App Secret.
 ```bash
 npx expo run:ios --device
 ```
-

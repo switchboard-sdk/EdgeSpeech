@@ -12,12 +12,4 @@ build/
 .bundle/
 vendor/bundle/
 tmp/
-
-# Created by post install
 ios/
-
-# Credentials
-example/credentials.ts
-
-# Dev session logs
-PROGRESS.md
