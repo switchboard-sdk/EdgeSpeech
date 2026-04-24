@@ -151,16 +151,24 @@ describe('useEdgeSpeech', () => {
     it('tracks all state transitions', () => {
       const { result } = renderHook(() => useEdgeSpeech())
 
-      act(() => { fireNativeEvent('onStateChange', { state: 'listening' }) })
+      act(() => {
+        fireNativeEvent('onStateChange', { state: 'listening' })
+      })
       expect(result.current.voiceState).toBe('listening')
 
-      act(() => { fireNativeEvent('onStateChange', { state: 'processing' }) })
+      act(() => {
+        fireNativeEvent('onStateChange', { state: 'processing' })
+      })
       expect(result.current.voiceState).toBe('processing')
 
-      act(() => { fireNativeEvent('onStateChange', { state: 'speaking' }) })
+      act(() => {
+        fireNativeEvent('onStateChange', { state: 'speaking' })
+      })
       expect(result.current.voiceState).toBe('speaking')
 
-      act(() => { fireNativeEvent('onStateChange', { state: 'idle' }) })
+      act(() => {
+        fireNativeEvent('onStateChange', { state: 'idle' })
+      })
       expect(result.current.voiceState).toBe('idle')
     })
   })

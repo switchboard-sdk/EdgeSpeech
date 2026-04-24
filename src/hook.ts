@@ -4,7 +4,6 @@ import SwitchboardVoiceModule, { type VoiceState } from './SwitchboardVoiceModul
 export function useEdgeSpeech() {
   const [transcript, setTranscript] = useState('')
   const transcriptCompleteCallback = useRef<((text: string) => void) | null>(null)
-
   const [voiceState, setVoiceState] = useState<VoiceState>('idle')
 
   useEffect(() => {
