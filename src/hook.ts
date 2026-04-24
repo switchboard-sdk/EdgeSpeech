@@ -20,12 +20,12 @@ export function useEdgeSpeech() {
     }
   }, [])
 
-  const onFinalTranscript = useCallback((cb: (text: string) => void) => {
+  const onTranscriptComplete = useCallback((cb: (text: string) => void) => {
     transcriptCompleteCallback.current = cb
   }, [])
 
   return {
     transcript,
-    onFinalTranscript,
+    onTranscriptComplete,
   }
 }

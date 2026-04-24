@@ -248,6 +248,14 @@ flowchart TB
 2. Create a new app in the dashboard
 3. Copy your App ID and App Secret
 
+## Tests
+
+Run unit tests with:
+
+```bash
+npm test
+```
+
 ## License
 
 MIT
