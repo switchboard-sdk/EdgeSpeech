@@ -1,22 +1,32 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import SwitchboardVoiceModule from './SwitchboardVoiceModule'
+import SwitchboardVoiceModule, { type VoiceState } from './SwitchboardVoiceModule'
 
 export function useEdgeSpeech() {
   const [transcript, setTranscript] = useState('')
   const transcriptCompleteCallback = useRef<((text: string) => void) | null>(null)
 
-  useEffect(() => {
-    SwitchboardVoiceModule.addListener('onTranscript', ({ text, isFinal }) => {
-      setTranscript(text) // always update display
+  const [voiceState, setVoiceState] = useState<VoiceState>('idle')
 
-      if (isFinal) {
-        transcriptCompleteCallback.current?.(text)
-        setTranscript('')
+  useEffect(() => {
+    const transcriptSub = SwitchboardVoiceModule.addListener(
+      'onTranscript',
+      ({ text, isFinal }) => {
+        setTranscript(text)
+
+        if (isFinal) {
+          transcriptCompleteCallback.current?.(text)
+          setTranscript('')
+        }
       }
+    )
+
+    const stateSub = SwitchboardVoiceModule.addListener('onStateChange', ({ state }) => {
+      setVoiceState(state)
     })
 
     return () => {
-      SwitchboardVoiceModule.removeAllListeners('onTranscript')
+      transcriptSub.remove()
+      stateSub.remove()
     }
   }, [])
 
@@ -27,5 +37,6 @@ export function useEdgeSpeech() {
   return {
     transcript,
     onTranscriptComplete,
+    voiceState,
   }
 }
