@@ -1,28 +1,26 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import SwitchboardVoiceModule, { type VoiceState } from './SwitchboardVoiceModule'
+import { type VoiceState } from './SwitchboardVoiceModule'
 import { useEdgeSpeechContext } from './EdgeSpeechProvider'
 
 export function useEdgeSpeech() {
-  const { start, stop, speak, stopSpeaking, requestMicrophonePermission } = useEdgeSpeechContext()
+  const { addListener, start, stop, speak, stopSpeaking, requestMicrophonePermission } =
+    useEdgeSpeechContext()
 
   const [transcript, setTranscript] = useState('')
   const transcriptCompleteCallback = useRef<((text: string) => void) | null>(null)
   const [voiceState, setVoiceState] = useState<VoiceState>('idle')
 
   useEffect(() => {
-    const transcriptSub = SwitchboardVoiceModule.addListener(
-      'onTranscript',
-      ({ text, isFinal }) => {
-        setTranscript(text)
+    const transcriptSub = addListener('onTranscript', ({ text, isFinal }) => {
+      setTranscript(text)
 
-        if (isFinal) {
-          transcriptCompleteCallback.current?.(text)
-          setTranscript('')
-        }
+      if (isFinal) {
+        transcriptCompleteCallback.current?.(text)
+        setTranscript('')
       }
-    )
+    })
 
-    const stateSub = SwitchboardVoiceModule.addListener('onStateChange', ({ state }) => {
+    const stateSub = addListener('onStateChange', ({ state }) => {
       setVoiceState(state)
     })
 
@@ -30,7 +28,7 @@ export function useEdgeSpeech() {
       transcriptSub.remove()
       stateSub.remove()
     }
-  }, [])
+  }, [addListener])
 
   const onTranscriptComplete = useCallback((cb: (text: string) => void) => {
     transcriptCompleteCallback.current = cb

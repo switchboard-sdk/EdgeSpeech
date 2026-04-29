@@ -10,6 +10,7 @@ export interface EdgeSpeechConfig {
 }
 
 export interface EdgeSpeechContextValue {
+  addListener: typeof SwitchboardVoiceModule.addListener
   start: () => Promise<void>
   stop: () => Promise<void>
   speak: (text: string) => Promise<void>
@@ -41,6 +42,7 @@ export function EdgeSpeechProvider({ config, children }: EdgeSpeechProviderProps
   }, [appId, appSecret, sttModel, ttsVoice, vadSensitivity])
 
   const value: EdgeSpeechContextValue = {
+    addListener: SwitchboardVoiceModule.addListener,
     start: () => SwitchboardVoiceModule.start(),
     stop: () => SwitchboardVoiceModule.stop(),
     speak: (text) => SwitchboardVoiceModule.speak(text),
