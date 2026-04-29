@@ -22,7 +22,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "postinstall": "node scripts/postinstall.js",
-    "test": "jest",
+    "test": "jest --verbose",
     "test:integration": "jest --config jest.integration.config.js",
     "format": "prettier --write .",
     "lint": "eslint . --fix",
