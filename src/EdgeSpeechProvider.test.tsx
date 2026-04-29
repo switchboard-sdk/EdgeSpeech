@@ -68,7 +68,9 @@ describe('EdgeSpeechProvider', () => {
   })
 
   it('throws when used outside of provider', () => {
+    const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
     const { result } = renderHook(() => useEdgeSpeechContext())
+    consoleSpy.mockRestore()
     expect(result.error).toEqual(
       new Error('useEdgeSpeech must be used within an <EdgeSpeechProvider>')
     )
