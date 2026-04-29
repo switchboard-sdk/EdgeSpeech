@@ -1,5 +1,7 @@
+import React from 'react'
 import { renderHook, act } from '@testing-library/react-hooks'
 import { useEdgeSpeech } from './hook'
+import { EdgeSpeechProvider } from './EdgeSpeechProvider'
 import SwitchboardVoiceModule from './SwitchboardVoiceModule'
 
 // Capture addListener callbacks by event name so tests can simulate native events
@@ -9,8 +11,21 @@ jest.mock('../src/SwitchboardVoiceModule', () => ({
   __esModule: true,
   default: {
     addListener: jest.fn(),
+    initialize: jest.fn(),
+    configure: jest.fn(),
+    start: jest.fn(() => Promise.resolve()),
+    stop: jest.fn(() => Promise.resolve()),
+    speak: jest.fn(() => Promise.resolve()),
+    stopSpeaking: jest.fn(() => Promise.resolve()),
+    requestMicrophonePermission: jest.fn(() => Promise.resolve(true)),
   },
 }))
+
+const testConfig = { appId: 'test-id', appSecret: 'test-secret' }
+
+// Wrap hook in provider for all tests
+const wrapper = ({ children }: { children: React.ReactNode }) =>
+  React.createElement(EdgeSpeechProvider, { config: testConfig }, children)
 
 /** Fire a simulated native event with optional payload */
 function fireNativeEvent(eventName: string, data?: unknown): void {
@@ -41,12 +56,12 @@ describe('useEdgeSpeech', () => {
 
   describe('transcript', () => {
     it('starts empty', () => {
-      const { result } = renderHook(() => useEdgeSpeech())
+      const { result } = renderHook(() => useEdgeSpeech(), { wrapper })
       expect(result.current.transcript).toBe('')
     })
 
     it('updates with interim transcript text', () => {
-      const { result } = renderHook(() => useEdgeSpeech())
+      const { result } = renderHook(() => useEdgeSpeech(), { wrapper })
 
       act(() => {
         fireNativeEvent('onTranscript', { text: 'hello wor', isFinal: false })
@@ -56,7 +71,7 @@ describe('useEdgeSpeech', () => {
     })
 
     it('updates with final transcript text then clears', () => {
-      const { result } = renderHook(() => useEdgeSpeech())
+      const { result } = renderHook(() => useEdgeSpeech(), { wrapper })
 
       act(() => {
         fireNativeEvent('onTranscript', { text: 'hello world', isFinal: true })
@@ -66,7 +81,7 @@ describe('useEdgeSpeech', () => {
     })
 
     it('shows interim text before clearing on final', () => {
-      const { result } = renderHook(() => useEdgeSpeech())
+      const { result } = renderHook(() => useEdgeSpeech(), { wrapper })
 
       act(() => {
         fireNativeEvent('onTranscript', { text: 'hello', isFinal: false })
@@ -82,7 +97,7 @@ describe('useEdgeSpeech', () => {
 
   describe('onTranscriptComplete', () => {
     it('calls the registered callback with final text', () => {
-      const { result } = renderHook(() => useEdgeSpeech())
+      const { result } = renderHook(() => useEdgeSpeech(), { wrapper })
       const handler = jest.fn()
 
       act(() => {
@@ -98,7 +113,7 @@ describe('useEdgeSpeech', () => {
     })
 
     it('does not call the callback for interim results', () => {
-      const { result } = renderHook(() => useEdgeSpeech())
+      const { result } = renderHook(() => useEdgeSpeech(), { wrapper })
       const handler = jest.fn()
 
       act(() => {
@@ -114,7 +129,7 @@ describe('useEdgeSpeech', () => {
     })
 
     it('replaces the callback when called again', () => {
-      const { result } = renderHook(() => useEdgeSpeech())
+      const { result } = renderHook(() => useEdgeSpeech(), { wrapper })
       const first = jest.fn()
       const second = jest.fn()
 
@@ -134,12 +149,12 @@ describe('useEdgeSpeech', () => {
 
   describe('voiceState', () => {
     it('starts as idle', () => {
-      const { result } = renderHook(() => useEdgeSpeech())
+      const { result } = renderHook(() => useEdgeSpeech(), { wrapper })
       expect(result.current.voiceState).toBe('idle')
     })
 
     it('updates when onStateChange fires', () => {
-      const { result } = renderHook(() => useEdgeSpeech())
+      const { result } = renderHook(() => useEdgeSpeech(), { wrapper })
 
       act(() => {
         fireNativeEvent('onStateChange', { state: 'listening' })
@@ -149,7 +164,7 @@ describe('useEdgeSpeech', () => {
     })
 
     it('tracks all state transitions', () => {
-      const { result } = renderHook(() => useEdgeSpeech())
+      const { result } = renderHook(() => useEdgeSpeech(), { wrapper })
 
       act(() => {
         fireNativeEvent('onStateChange', { state: 'listening' })
@@ -188,7 +203,7 @@ describe('useEdgeSpeech', () => {
         return { remove: removeFn }
       })
 
-      const { unmount } = renderHook(() => useEdgeSpeech())
+      const { unmount } = renderHook(() => useEdgeSpeech(), { wrapper })
       unmount()
 
       expect(removeFns.length).toBeGreaterThan(0)

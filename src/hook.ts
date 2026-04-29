@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import SwitchboardVoiceModule, { type VoiceState } from './SwitchboardVoiceModule'
+import { useEdgeSpeechContext } from './EdgeSpeechProvider'
 
 export function useEdgeSpeech() {
+  const { start, stop, speak, stopSpeaking, requestMicrophonePermission } = useEdgeSpeechContext()
+
   const [transcript, setTranscript] = useState('')
   const transcriptCompleteCallback = useRef<((text: string) => void) | null>(null)
   const [voiceState, setVoiceState] = useState<VoiceState>('idle')
@@ -37,5 +40,10 @@ export function useEdgeSpeech() {
     transcript,
     onTranscriptComplete,
     voiceState,
+    start,
+    stop,
+    speak,
+    stopSpeaking,
+    requestMicrophonePermission,
   }
 }
