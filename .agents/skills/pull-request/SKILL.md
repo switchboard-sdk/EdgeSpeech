@@ -11,7 +11,7 @@ description: >
 2. Ensure all changes are committed and the branch is pushed to origin.
 3. Derive the PR title from the branch name: convert the branch slug (e.g. `303-add-field-groups`) to `<ID>: <Title>` format (e.g. `303: Add field groups`).
 4. The PR description should include brief bullet points of the key changes.
-5. Use the `mcp_io_github_git_create_pull_request` tool to open the PR targeting `main`, with `owner` set to `Soviut` and `repo` set to `envy-supabase`.
+5. Use the `mcp_io_github_git_create_pull_request` tool to open the PR targeting `main`.
 6. Print the `http_url` of the created PR to the user.
 
 ## PR Description Format

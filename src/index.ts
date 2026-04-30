@@ -13,6 +13,11 @@ export { default as SwitchboardVoiceModule } from './SwitchboardVoiceModule'
 // Export the high-level wrapper API
 export { EdgeSpeech } from './EdgeSpeech'
 
+// Export React provider and hook
+export { EdgeSpeechProvider } from './EdgeSpeechProvider'
+export type { EdgeSpeechConfig, EdgeSpeechContextValue } from './EdgeSpeechProvider'
+export { useEdgeSpeech } from './hook'
+
 // Export convenience functions that delegate to the native module
 import SwitchboardVoiceModule from './SwitchboardVoiceModule'
 
@@ -24,12 +29,12 @@ export function configure(config: Record<string, any>): void {
   SwitchboardVoiceModule.configure(config)
 }
 
-export async function start(): Promise<void> {
-  return SwitchboardVoiceModule.start()
+export async function listen(): Promise<void> {
+  return SwitchboardVoiceModule.listen()
 }
 
-export async function stop(): Promise<void> {
-  return SwitchboardVoiceModule.stop()
+export async function stopListening(): Promise<void> {
+  return SwitchboardVoiceModule.stopListening()
 }
 
 export async function speak(text: string): Promise<void> {

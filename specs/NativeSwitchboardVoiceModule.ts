@@ -13,8 +13,8 @@ export interface Spec extends TurboModule {
   createSpeakingEngine(): string // Returns engineID
 
   // Control Methods
-  start(): void
-  stop(): void
+  listen(): void
+  stopListening(): void
   speak(text: string): void
   stopSpeaking(): void
 

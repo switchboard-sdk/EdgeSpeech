@@ -3,7 +3,7 @@
 Web developers can add listening, speaking, or both to a React Native app with EdgeSpeech, without writing any native audio code. Voice Activity Detection, Speech-to-Text, and Text-to-Speech all run on-device through the [Switchboard SDK](https://switchboard.audio/). Your JavaScript works entirely with text.
 
 ```typescript
-import { SwitchboardVoiceModule, initialize, start, speak } from '@synervoz/edgespeech'
+import { SwitchboardVoiceModule, initialize, listen, speak } from '@synervoz/edgespeech'
 
 initialize('YOUR_APP_ID', 'YOUR_APP_SECRET')
 
@@ -14,7 +14,7 @@ SwitchboardVoiceModule.addListener('onTranscript', async ({ text, isFinal }) => 
   }
 })
 
-await start()
+await listen()
 ```
 
 The [example app](./example/) shows the complete voice loop running end-to-end.
@@ -75,7 +75,7 @@ import {
   SwitchboardVoiceModule,
   initialize,
   configure,
-  start,
+  listen,
   speak,
   requestMicrophonePermission,
 } from '@synervoz/edgespeech'
@@ -107,7 +107,7 @@ SwitchboardVoiceModule.addListener('onError', ({ code, message }) => {
 // 4. Request permission and start
 const granted = await requestMicrophonePermission()
 if (granted) {
-  await start()
+  await listen()
 }
 
 // 5. Speak responses
@@ -133,8 +133,8 @@ await EdgeSpeech.configure({
 | Method                          | Description                              |
 | ------------------------------- | ---------------------------------------- |
 | `configure(config)`             | Initialize with credentials and settings |
-| `start()`                       | Start listening for voice input          |
-| `stop()`                        | Stop listening                           |
+| `listen()`                      | Start listening for voice input          |
+| `stopListening()`               | Stop listening                           |
 | `speak(text)`                   | Speak text using TTS                     |
 | `stopSpeaking()`                | Stop current TTS playback                |
 | `requestMicrophonePermission()` | Request microphone access                |
@@ -181,8 +181,8 @@ flowchart TB
     subgraph Engines["EdgeSpeech"]
         subgraph JS["JavaScript API"]
             subgraph Controls["Controls"]
-                start["start()"]
-                stop["stop()"]
+                listen["listen()"]
+                stopListening["stopListening()"]
                 stopSpeaking["stopSpeaking()"]
             end
             speak["speak(text)"]
@@ -209,8 +209,8 @@ flowchart TB
     ListenGraph -- "executed by" --> SDK
     SpeakingGraph -- "executed by" --> SDK
 
-    start --> ListenGraph
-    stop --> ListenGraph
+    listen --> ListenGraph
+    stopListening --> ListenGraph
     speak --> SpeakingGraph
     stopSpeaking --> SpeakingGraph
 
@@ -247,6 +247,14 @@ flowchart TB
 1. Sign up at [switchboard.audio](https://console.switchboard.audio/register)
 2. Create a new app in the dashboard
 3. Copy your App ID and App Secret
+
+## Tests
+
+Run unit tests with:
+
+```bash
+npm test
+```
 
 ## License
 

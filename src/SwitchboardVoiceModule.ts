@@ -29,8 +29,8 @@ declare class SwitchboardVoiceModuleType extends NativeModule<{
 }> {
   initialize(appId: string, appSecret: string): void
   configure(config: Record<string, any>): void
-  start(): Promise<void>
-  stop(): Promise<void>
+  listen(): Promise<void>
+  stopListening(): Promise<void>
   speak(text: string): Promise<void>
   stopSpeaking(): Promise<void>
   requestMicrophonePermission(): Promise<boolean>
