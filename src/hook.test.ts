@@ -1,5 +1,5 @@
 import React from 'react'
-import { renderHook, act } from '@testing-library/react-hooks'
+import { renderHook, act } from '@testing-library/react-native'
 import { useEdgeSpeech } from './hook'
 import { EdgeSpeechProvider } from './EdgeSpeechProvider'
 import SwitchboardVoiceModule from './SwitchboardVoiceModule'

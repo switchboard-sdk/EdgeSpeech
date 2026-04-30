@@ -1,5 +1,5 @@
 import React from 'react'
-import { renderHook, act } from '@testing-library/react-hooks'
+import { renderHook, act } from '@testing-library/react-native'
 import { EdgeSpeechProvider, useEdgeSpeechContext } from './EdgeSpeechProvider'
 import SwitchboardVoiceModule from './SwitchboardVoiceModule'
 
@@ -68,11 +68,8 @@ describe('EdgeSpeechProvider', () => {
   })
 
   it('throws when used outside of provider', () => {
-    const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
-    const { result } = renderHook(() => useEdgeSpeechContext())
-    consoleSpy.mockRestore()
-    expect(result.error).toEqual(
-      new Error('useEdgeSpeech must be used within an <EdgeSpeechProvider>')
+    expect(() => renderHook(() => useEdgeSpeechContext())).toThrow(
+      'useEdgeSpeech must be used within an <EdgeSpeechProvider>'
     )
   })
 
