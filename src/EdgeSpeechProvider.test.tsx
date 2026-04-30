@@ -9,8 +9,8 @@ jest.mock('../src/SwitchboardVoiceModule', () => ({
     addListener: jest.fn(() => ({ remove: jest.fn() })),
     initialize: jest.fn(),
     configure: jest.fn(),
-    start: jest.fn(() => Promise.resolve()),
-    stop: jest.fn(() => Promise.resolve()),
+    listen: jest.fn(() => Promise.resolve()),
+    stopListening: jest.fn(() => Promise.resolve()),
     speak: jest.fn(() => Promise.resolve()),
     stopSpeaking: jest.fn(() => Promise.resolve()),
     requestMicrophonePermission: jest.fn(() => Promise.resolve(true)),
@@ -60,11 +60,11 @@ describe('EdgeSpeechProvider', () => {
     )
   })
 
-  it('calls stop on unmount', () => {
+  it('calls stopListening on unmount', () => {
     const { unmount } = renderHook(() => useEdgeSpeechContext(), { wrapper })
     unmount()
 
-    expect(SwitchboardVoiceModule.stop).toHaveBeenCalled()
+    expect(SwitchboardVoiceModule.stopListening).toHaveBeenCalled()
   })
 
   it('throws when used outside of provider', () => {
@@ -77,20 +77,20 @@ describe('EdgeSpeechProvider', () => {
   })
 
   describe('exposed methods delegate to native module', () => {
-    it('start()', async () => {
+    it('listen()', async () => {
       const { result } = renderHook(() => useEdgeSpeechContext(), { wrapper })
       await act(async () => {
-        await result.current.start()
+        await result.current.listen()
       })
-      expect(SwitchboardVoiceModule.start).toHaveBeenCalled()
+      expect(SwitchboardVoiceModule.listen).toHaveBeenCalled()
     })
 
-    it('stop()', async () => {
+    it('stopListening()', async () => {
       const { result } = renderHook(() => useEdgeSpeechContext(), { wrapper })
       await act(async () => {
-        await result.current.stop()
+        await result.current.stopListening()
       })
-      expect(SwitchboardVoiceModule.stop).toHaveBeenCalled()
+      expect(SwitchboardVoiceModule.stopListening).toHaveBeenCalled()
     })
 
     it('speak(text)', async () => {

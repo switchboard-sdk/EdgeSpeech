@@ -18,8 +18,8 @@ import {
   SwitchboardVoiceModule,
   initialize,
   configure,
-  start,
-  stop,
+  listen,
+  stopListening,
   speak,
   stopSpeaking,
   requestMicrophonePermission,
@@ -125,7 +125,7 @@ function App(): React.JSX.Element {
     const ttsCompleteSub = SwitchboardVoiceModule.addListener('onTTSComplete', () => {
       console.log('TTS playback completed')
       if (conversationModeRef.current) {
-        start()
+        listen()
           .then(() => setIsListening(true))
           .catch(console.error)
       }
@@ -143,7 +143,7 @@ function App(): React.JSX.Element {
       speechStartSub.remove()
       speechEndSub.remove()
       ttsCompleteSub.remove()
-      stop().catch(console.error)
+      stopListening().catch(console.error)
     }
   }, [])
 
@@ -172,7 +172,7 @@ function App(): React.JSX.Element {
         return
       }
 
-      await start()
+      await listen()
       setIsListening(true)
       setTranscript('')
     } catch (error) {
@@ -182,7 +182,7 @@ function App(): React.JSX.Element {
 
   const handleStopListening = async () => {
     try {
-      await stop()
+      await stopListening()
       setIsListening(false)
     } catch (error) {
       Alert.alert('Error', (error as Error).message)
@@ -212,7 +212,7 @@ function App(): React.JSX.Element {
   const handleConversationResponse = async (userText: string) => {
     try {
       setIsThinking(true)
-      await stop()
+      await stopListening()
       setIsListening(false)
 
       // Add user message to conversation history

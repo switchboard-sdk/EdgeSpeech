@@ -11,8 +11,8 @@ export interface EdgeSpeechConfig {
 
 export interface EdgeSpeechContextValue {
   addListener: typeof SwitchboardVoiceModule.addListener
-  start: () => Promise<void>
-  stop: () => Promise<void>
+  listen: () => Promise<void>
+  stopListening: () => Promise<void>
   speak: (text: string) => Promise<void>
   stopSpeaking: () => Promise<void>
   requestMicrophonePermission: () => Promise<boolean>
@@ -37,14 +37,14 @@ export function EdgeSpeechProvider({ config, children }: EdgeSpeechProviderProps
     })
 
     return () => {
-      SwitchboardVoiceModule.stop().catch(() => {})
+      SwitchboardVoiceModule.stopListening().catch(() => {})
     }
   }, [appId, appSecret, sttModel, ttsVoice, vadSensitivity])
 
   const value: EdgeSpeechContextValue = {
     addListener: SwitchboardVoiceModule.addListener,
-    start: () => SwitchboardVoiceModule.start(),
-    stop: () => SwitchboardVoiceModule.stop(),
+    listen: () => SwitchboardVoiceModule.listen(),
+    stopListening: () => SwitchboardVoiceModule.stopListening(),
     speak: (text) => SwitchboardVoiceModule.speak(text),
     stopSpeaking: () => SwitchboardVoiceModule.stopSpeaking(),
     requestMicrophonePermission: () => SwitchboardVoiceModule.requestMicrophonePermission(),

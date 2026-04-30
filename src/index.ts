@@ -29,12 +29,12 @@ export function configure(config: Record<string, any>): void {
   SwitchboardVoiceModule.configure(config)
 }
 
-export async function start(): Promise<void> {
-  return SwitchboardVoiceModule.start()
+export async function listen(): Promise<void> {
+  return SwitchboardVoiceModule.listen()
 }
 
-export async function stop(): Promise<void> {
-  return SwitchboardVoiceModule.stop()
+export async function stopListening(): Promise<void> {
+  return SwitchboardVoiceModule.stopListening()
 }
 
 export async function speak(text: string): Promise<void> {

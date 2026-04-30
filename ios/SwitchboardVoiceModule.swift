@@ -72,8 +72,8 @@ public class SwitchboardVoiceModule: Module, AudioGraphManagerDelegate {
         }
 
         // Start listening
-        AsyncFunction("start") { (promise: Promise) in
-            print("[SwitchboardVoice] start called")
+        AsyncFunction("listen") { (promise: Promise) in
+            print("[SwitchboardVoice] listen called")
 
             guard self.isInitialized else {
                 promise.reject("NOT_INITIALIZED", "SDK not initialized. Call initialize() first.")
@@ -95,20 +95,20 @@ public class SwitchboardVoiceModule: Module, AudioGraphManagerDelegate {
                     try self.audioGraphManager?.startListening()
                     promise.resolve(nil)
                 } catch {
-                    promise.reject("START_FAILED", error.localizedDescription)
+                    promise.reject("LISTEN_FAILED", error.localizedDescription)
                 }
             }
         }
 
         // Stop listening
-        AsyncFunction("stop") { (promise: Promise) in
-            print("[SwitchboardVoice] stop called")
+        AsyncFunction("stopListening") { (promise: Promise) in
+            print("[SwitchboardVoice] stopListening called")
 
             do {
                 try self.audioGraphManager?.stopListening()
                 promise.resolve(nil)
             } catch {
-                promise.reject("STOP_FAILED", error.localizedDescription)
+                promise.reject("STOP_LISTENING_FAILED", error.localizedDescription)
             }
         }
 

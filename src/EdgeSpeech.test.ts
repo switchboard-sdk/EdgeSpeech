@@ -8,8 +8,8 @@ jest.mock('../src/SwitchboardVoiceModule', () => ({
     addListener: jest.fn(() => ({ remove: jest.fn() })),
     initialize: jest.fn(),
     configure: jest.fn(),
-    start: jest.fn(() => Promise.resolve()),
-    stop: jest.fn(() => Promise.resolve()),
+    listen: jest.fn(() => Promise.resolve()),
+    stopListening: jest.fn(() => Promise.resolve()),
     speak: jest.fn(() => Promise.resolve()),
     stopSpeaking: jest.fn(() => Promise.resolve()),
     requestMicrophonePermission: jest.fn(() => Promise.resolve(true)),
@@ -74,9 +74,9 @@ describe('EdgeSpeech', () => {
     })
   })
 
-  describe('start()', () => {
+  describe('listen()', () => {
     it('should throw error if not configured', async () => {
-      await expect(EdgeSpeech.start()).rejects.toThrow('EdgeSpeech must be configured before use')
+      await expect(EdgeSpeech.listen()).rejects.toThrow('EdgeSpeech must be configured before use')
     })
 
     it('should start listening after configuration', async () => {
@@ -86,11 +86,11 @@ describe('EdgeSpeech', () => {
       }
 
       await EdgeSpeech.configure(config)
-      await expect(EdgeSpeech.start()).resolves.toBeUndefined()
+      await expect(EdgeSpeech.listen()).resolves.toBeUndefined()
     })
   })
 
-  describe('stop()', () => {
+  describe('stopListening()', () => {
     it('should stop listening', async () => {
       const config: VoiceConfig = {
         appId: 'test-id',
@@ -98,8 +98,8 @@ describe('EdgeSpeech', () => {
       }
 
       await EdgeSpeech.configure(config)
-      await EdgeSpeech.start()
-      await expect(EdgeSpeech.stop()).resolves.toBeUndefined()
+      await EdgeSpeech.listen()
+      await expect(EdgeSpeech.stopListening()).resolves.toBeUndefined()
     })
   })
 

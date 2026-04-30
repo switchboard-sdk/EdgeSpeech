@@ -29,7 +29,7 @@ import type {
  * };
  *
  * // Start listening
- * await EdgeSpeech.start();
+ * await EdgeSpeech.listen();
  *
  * // Speak response
  * await EdgeSpeech.speak('Hello world');
@@ -107,16 +107,16 @@ class EdgeSpeechAPI {
    *
    * @throws Error if not configured
    */
-  async start(): Promise<void> {
+  async listen(): Promise<void> {
     this._ensureConfigured()
-    await SwitchboardVoiceModule.start()
+    await SwitchboardVoiceModule.listen()
   }
 
   /**
    * Stop listening for voice input
    */
-  async stop(): Promise<void> {
-    await SwitchboardVoiceModule.stop()
+  async stopListening(): Promise<void> {
+    await SwitchboardVoiceModule.stopListening()
   }
 
   /**
