@@ -40,20 +40,19 @@ function VoiceApp(): React.JSX.Element {
 
   const handleConversationResponse = useCallback(
     async (userMessage: ConversationMessage) => {
+      await stopListening()
+      let response: string
       try {
-        await stopListening()
-        const response = await sendToChat(userMessage.content, [
-          ...conversationHistory,
-          userMessage,
-        ])
-        const assistantMessage: ConversationMessage = { role: 'assistant', content: response }
-        setConversationHistory((prev) => [...prev, assistantMessage])
-        setTimeout(() => chatScrollRef.current?.scrollToEnd({ animated: true }), 50)
-        await speak(response)
+        response = await sendToChat(userMessage.content, [...conversationHistory, userMessage])
       } catch (error) {
         console.error('Chat error:', error)
         Alert.alert('Chat Error', (error as Error).message)
+        return
       }
+      const assistantMessage: ConversationMessage = { role: 'assistant', content: response }
+      setConversationHistory((prev) => [...prev, assistantMessage])
+      setTimeout(() => chatScrollRef.current?.scrollToEnd({ animated: true }), 50)
+      await speak(response)
     },
     [conversationHistory, stopListening, speak]
   )
@@ -75,53 +74,35 @@ function VoiceApp(): React.JSX.Element {
   useEffect(() => {
     if (prevVoiceStateRef.current === 'speaking' && voiceState === 'idle') {
       if (conversationMode) {
-        listen().catch(console.error)
+        listen()
       }
     }
     prevVoiceStateRef.current = voiceState
   }, [voiceState, listen, conversationMode])
 
   const handleStartListening = async () => {
-    try {
-      // Request microphone permission first
-      const granted = await requestMicrophonePermission()
-      if (!granted) {
-        Alert.alert('Permission Denied', 'Microphone permission is required')
-        return
-      }
-
-      await listen()
-    } catch (error) {
-      Alert.alert('Error', (error as Error).message)
+    const granted = await requestMicrophonePermission()
+    if (!granted) {
+      Alert.alert('Permission Denied', 'Microphone permission is required')
+      return
     }
+    await listen()
   }
 
   const handleStopListening = async () => {
-    try {
-      await stopListening()
-    } catch (error) {
-      Alert.alert('Error', (error as Error).message)
-    }
+    await stopListening()
   }
 
   const handleStartSpeaking = async () => {
-    try {
-      if (!textToSpeak.trim()) {
-        Alert.alert('Error', 'Please enter text to speak')
-        return
-      }
-      await speak(textToSpeak)
-    } catch (error) {
-      Alert.alert('Error', (error as Error).message)
+    if (!textToSpeak.trim()) {
+      Alert.alert('Error', 'Please enter text to speak')
+      return
     }
+    await speak(textToSpeak)
   }
 
   const handleStopSpeaking = async () => {
-    try {
-      await stopSpeaking()
-    } catch (error) {
-      Alert.alert('Error', (error as Error).message)
-    }
+    await stopSpeaking()
   }
 
   const clearConversation = () => {

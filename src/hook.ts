@@ -40,15 +40,59 @@ export function useEdgeSpeech() {
     transcriptCompleteCallback.current = cb
   }, [])
 
+  const wrappedListen = useCallback(async () => {
+    try {
+      await listen()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }, [listen])
+
+  const wrappedStopListening = useCallback(async () => {
+    try {
+      await stopListening()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }, [stopListening])
+
+  const wrappedSpeak = useCallback(
+    async (text: string) => {
+      try {
+        await speak(text)
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e))
+      }
+    },
+    [speak]
+  )
+
+  const wrappedStopSpeaking = useCallback(async () => {
+    try {
+      await stopSpeaking()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }, [stopSpeaking])
+
+  const wrappedRequestMicrophonePermission = useCallback(async () => {
+    try {
+      return await requestMicrophonePermission()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+      return false
+    }
+  }, [requestMicrophonePermission])
+
   return {
     transcript,
     onTranscriptComplete,
     voiceState,
     error,
-    listen,
-    stopListening,
-    speak,
-    stopSpeaking,
-    requestMicrophonePermission,
+    listen: wrappedListen,
+    stopListening: wrappedStopListening,
+    speak: wrappedSpeak,
+    stopSpeaking: wrappedStopSpeaking,
+    requestMicrophonePermission: wrappedRequestMicrophonePermission,
   }
 }

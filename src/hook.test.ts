@@ -239,4 +239,50 @@ describe('useEdgeSpeech', () => {
       removeFns.forEach((fn) => expect(fn).toHaveBeenCalledTimes(1))
     })
   })
+
+  describe('action error handling', () => {
+    const methods = ['listen', 'stopListening', 'stopSpeaking'] as const
+
+    it.each(methods)('%s catches rejection and sets error', async (method) => {
+      jest
+        .mocked(SwitchboardVoiceModule[method])
+        .mockRejectedValueOnce(new Error(`${method} failed`))
+
+      const { result } = renderHook(() => useEdgeSpeech(), { wrapper })
+
+      await act(async () => {
+        await result.current[method]()
+      })
+
+      expect(result.current.error).toBe(`${method} failed`)
+    })
+
+    it('speak catches rejection and sets error', async () => {
+      jest.mocked(SwitchboardVoiceModule.speak).mockRejectedValueOnce(new Error('speak failed'))
+
+      const { result } = renderHook(() => useEdgeSpeech(), { wrapper })
+
+      await act(async () => {
+        await result.current.speak('hello')
+      })
+
+      expect(result.current.error).toBe('speak failed')
+    })
+
+    it('requestMicrophonePermission catches rejection, sets error, and returns false', async () => {
+      jest
+        .mocked(SwitchboardVoiceModule.requestMicrophonePermission)
+        .mockRejectedValueOnce(new Error('permission denied'))
+
+      const { result } = renderHook(() => useEdgeSpeech(), { wrapper })
+
+      let granted: boolean | undefined
+      await act(async () => {
+        granted = await result.current.requestMicrophonePermission()
+      })
+
+      expect(granted).toBe(false)
+      expect(result.current.error).toBe('permission denied')
+    })
+  })
 })
