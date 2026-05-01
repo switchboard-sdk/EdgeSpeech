@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import {
   ScrollView,
   StatusBar,
@@ -36,17 +36,27 @@ function VoiceApp(): React.JSX.Element {
   const [conversationMode, setConversationMode] = useState(false)
   const [conversationHistory, setConversationHistory] = useState<ConversationMessage[]>([])
   const chatScrollRef = useRef<ScrollView>(null)
-  const conversationModeRef = useRef(conversationMode)
-  const conversationHistoryRef = useRef(conversationHistory)
   const prevVoiceStateRef = useRef(voiceState)
 
-  useEffect(() => {
-    conversationModeRef.current = conversationMode
-  }, [conversationMode])
-
-  useEffect(() => {
-    conversationHistoryRef.current = conversationHistory
-  }, [conversationHistory])
+  const handleConversationResponse = useCallback(
+    async (userMessage: ConversationMessage) => {
+      try {
+        await stopListening()
+        const response = await sendToChat(userMessage.content, [
+          ...conversationHistory,
+          userMessage,
+        ])
+        const assistantMessage: ConversationMessage = { role: 'assistant', content: response }
+        setConversationHistory((prev) => [...prev, assistantMessage])
+        setTimeout(() => chatScrollRef.current?.scrollToEnd({ animated: true }), 50)
+        await speak(response)
+      } catch (error) {
+        console.error('Chat error:', error)
+        Alert.alert('Chat Error', (error as Error).message)
+      }
+    },
+    [conversationHistory, stopListening, speak]
+  )
 
   // Register final-transcript callback
   useEffect(() => {
@@ -55,21 +65,21 @@ function VoiceApp(): React.JSX.Element {
       setConversationHistory((prev) => [...prev, userMessage])
       setTimeout(() => chatScrollRef.current?.scrollToEnd({ animated: true }), 50)
 
-      if (conversationModeRef.current && text.trim()) {
+      if (conversationMode && text.trim()) {
         handleConversationResponse(userMessage)
       }
     })
-  }, [onTranscriptComplete])
+  }, [onTranscriptComplete, conversationMode, handleConversationResponse])
 
   // Resume listening after TTS completes in conversation mode
   useEffect(() => {
     if (prevVoiceStateRef.current === 'speaking' && voiceState === 'idle') {
-      if (conversationModeRef.current) {
+      if (conversationMode) {
         listen().catch(console.error)
       }
     }
     prevVoiceStateRef.current = voiceState
-  }, [voiceState, listen])
+  }, [voiceState, listen, conversationMode])
 
   const handleStartListening = async () => {
     try {
@@ -111,23 +121,6 @@ function VoiceApp(): React.JSX.Element {
       await stopSpeaking()
     } catch (error) {
       Alert.alert('Error', (error as Error).message)
-    }
-  }
-
-  const handleConversationResponse = async (userMessage: ConversationMessage) => {
-    try {
-      await stopListening()
-      const response = await sendToChat(userMessage.content, [
-        ...conversationHistoryRef.current,
-        userMessage,
-      ])
-      const assistantMessage: ConversationMessage = { role: 'assistant', content: response }
-      setConversationHistory((prev) => [...prev, assistantMessage])
-      setTimeout(() => chatScrollRef.current?.scrollToEnd({ animated: true }), 50)
-      await speak(response)
-    } catch (error) {
-      console.error('Chat error:', error)
-      Alert.alert('Chat Error', (error as Error).message)
     }
   }
 
