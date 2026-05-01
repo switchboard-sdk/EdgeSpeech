@@ -1,6 +1,10 @@
 import React from 'react'
 import { renderHook, act } from '@testing-library/react-native'
-import { EdgeSpeechProvider, useEdgeSpeechContext } from './EdgeSpeechProvider'
+import {
+  EdgeSpeechProvider,
+  useEdgeSpeechContext,
+  type EdgeSpeechProviderProps,
+} from './EdgeSpeechProvider'
 import SwitchboardVoiceModule from './SwitchboardVoiceModule'
 
 jest.mock('../src/SwitchboardVoiceModule', () => ({
@@ -17,10 +21,10 @@ jest.mock('../src/SwitchboardVoiceModule', () => ({
   },
 }))
 
-const testConfig = { appId: 'test-id', appSecret: 'test-secret' }
+const defaultProps: EdgeSpeechProviderProps = { appId: 'test-id', appSecret: 'test-secret' }
 
 const wrapper = ({ children }: { children: React.ReactNode }) =>
-  React.createElement(EdgeSpeechProvider, { config: testConfig }, children)
+  React.createElement(EdgeSpeechProvider, defaultProps, children)
 
 describe('EdgeSpeechProvider', () => {
   beforeEach(() => {
@@ -49,7 +53,7 @@ describe('EdgeSpeechProvider', () => {
     const customWrapper = ({ children }: { children: React.ReactNode }) =>
       React.createElement(
         EdgeSpeechProvider,
-        { config: { ...testConfig, vadSensitivity: 0.8, ttsVoice: 'en_US' } },
+        { appId: 'test-id', appSecret: 'test-secret', vadSensitivity: 0.8, ttsVoice: 'en_US' },
         children
       )
 
@@ -58,6 +62,29 @@ describe('EdgeSpeechProvider', () => {
     expect(SwitchboardVoiceModule.configure).toHaveBeenCalledWith(
       expect.objectContaining({ vadSensitivity: 0.8, ttsVoice: 'en_US' })
     )
+  })
+
+  it('passes sampleRate and bufferSize to configure when provided', () => {
+    const customWrapper = ({ children }: { children: React.ReactNode }) =>
+      React.createElement(
+        EdgeSpeechProvider,
+        { appId: 'test-id', appSecret: 'test-secret', sampleRate: 22050, bufferSize: 1024 },
+        children
+      )
+
+    renderHook(() => useEdgeSpeechContext(), { wrapper: customWrapper })
+
+    expect(SwitchboardVoiceModule.configure).toHaveBeenCalledWith(
+      expect.objectContaining({ sampleRate: 22050, bufferSize: 1024 })
+    )
+  })
+
+  it('omits sampleRate and bufferSize from configure when not provided', () => {
+    renderHook(() => useEdgeSpeechContext(), { wrapper })
+
+    const configArg = (SwitchboardVoiceModule.configure as jest.Mock).mock.calls[0][0]
+    expect(configArg).not.toHaveProperty('sampleRate')
+    expect(configArg).not.toHaveProperty('bufferSize')
   })
 
   it('calls stopListening on unmount', () => {
