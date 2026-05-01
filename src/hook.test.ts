@@ -186,6 +186,37 @@ describe('useEdgeSpeech', () => {
     })
   })
 
+  describe('error', () => {
+    it('starts as null', () => {
+      const { result } = renderHook(() => useEdgeSpeech(), { wrapper })
+      expect(result.current.error).toBeNull()
+    })
+
+    it('updates when onError fires', () => {
+      const { result } = renderHook(() => useEdgeSpeech(), { wrapper })
+
+      act(() => {
+        fireNativeEvent('onError', { code: 'STT_FAILED', message: 'Speech recognition failed' })
+      })
+
+      expect(result.current.error).toBe('Speech recognition failed')
+    })
+
+    it('updates with the latest error message', () => {
+      const { result } = renderHook(() => useEdgeSpeech(), { wrapper })
+
+      act(() => {
+        fireNativeEvent('onError', { code: 'STT_FAILED', message: 'First error' })
+      })
+      expect(result.current.error).toBe('First error')
+
+      act(() => {
+        fireNativeEvent('onError', { code: 'TTS_FAILED', message: 'Second error' })
+      })
+      expect(result.current.error).toBe('Second error')
+    })
+  })
+
   describe('cleanup', () => {
     it('removes all listeners on unmount', () => {
       const removeFns: jest.Mock[] = []
