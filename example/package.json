@@ -10,12 +10,13 @@
     "postinstall": "sed -i '' 's/jsonVersion) !== 2/jsonVersion) !== 2 \\&\\& devicesJson.info.jsonVersion !== 3/' node_modules/expo/node_modules/@expo/cli/build/src/start/platforms/ios/devicectl.js 2>/dev/null || true"
   },
   "dependencies": {
+    "@synervoz/edgespeech": "file:..",
     "expo": "~54.0.32",
     "expo-dev-client": "~6.0.20",
     "expo-status-bar": "~3.0.9",
     "react": "19.1.0",
     "react-native": "0.81.5",
-    "@synervoz/edgespeech": "file:.."
+    "react-native-safe-area-context": "~5.6.0"
   },
   "devDependencies": {
     "@types/react": "~19.1.0",

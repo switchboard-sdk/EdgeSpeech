@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
 import {
-  SafeAreaView,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -11,6 +10,7 @@ import {
   Alert,
   Switch,
 } from 'react-native'
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context'
 
 import { sendToChat, ConversationMessage } from './services/chatService'
 
@@ -529,11 +529,13 @@ const styles = StyleSheet.create({
 
 export default function App(): React.JSX.Element {
   return (
-    <EdgeSpeechProvider
-      appId={SWITCHBOARD_APP_ID}
-      appSecret={SWITCHBOARD_APP_SECRET}
-      vadSensitivity={0.5}>
-      <VoiceApp />
-    </EdgeSpeechProvider>
+    <SafeAreaProvider>
+      <EdgeSpeechProvider
+        appId={SWITCHBOARD_APP_ID}
+        appSecret={SWITCHBOARD_APP_SECRET}
+        vadSensitivity={0.5}>
+        <VoiceApp />
+      </EdgeSpeechProvider>
+    </SafeAreaProvider>
   )
 }
