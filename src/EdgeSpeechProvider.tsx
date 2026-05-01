@@ -1,14 +1,6 @@
 import React, { createContext, useContext, useEffect, type ReactNode } from 'react'
 import SwitchboardVoiceModule from './SwitchboardVoiceModule'
 
-export interface EdgeSpeechConfig {
-  appId: string
-  appSecret: string
-  sttModel?: string
-  ttsVoice?: string
-  vadSensitivity?: number
-}
-
 export interface EdgeSpeechContextValue {
   addListener: typeof SwitchboardVoiceModule.addListener
   listen: () => Promise<void>
@@ -20,26 +12,50 @@ export interface EdgeSpeechContextValue {
 
 const EdgeSpeechContext = createContext<EdgeSpeechContextValue | null>(null)
 
-interface EdgeSpeechProviderProps {
-  config: EdgeSpeechConfig
+export interface EdgeSpeechProviderProps {
+  appId: string
+  appSecret: string
+  sttModel?: string
+  ttsVoice?: string
+  vadSensitivity?: number
+  sampleRate?: number
+  bufferSize?: number
   children?: ReactNode
 }
 
-export function EdgeSpeechProvider({ config, children }: EdgeSpeechProviderProps) {
-  const { appId, appSecret, sttModel, ttsVoice, vadSensitivity } = config
+const defaultConfig = {
+  sttModel: 'whisper-base-en',
+  ttsVoice: 'en_GB',
+  vadSensitivity: 0.5,
+}
 
+export function EdgeSpeechProvider({
+  appId,
+  appSecret,
+  sttModel,
+  ttsVoice,
+  vadSensitivity,
+  sampleRate,
+  bufferSize,
+  children,
+}: EdgeSpeechProviderProps) {
   useEffect(() => {
     SwitchboardVoiceModule.initialize(appId, appSecret)
-    SwitchboardVoiceModule.configure({
-      sttModel: sttModel ?? 'whisper-base-en',
-      ttsVoice: ttsVoice ?? 'en_GB',
-      vadSensitivity: vadSensitivity ?? 0.5,
-    })
 
     return () => {
       SwitchboardVoiceModule.stopListening().catch(() => {})
     }
-  }, [appId, appSecret, sttModel, ttsVoice, vadSensitivity])
+  }, [appId, appSecret])
+
+  useEffect(() => {
+    SwitchboardVoiceModule.configure({
+      sttModel: sttModel ?? defaultConfig.sttModel,
+      ttsVoice: ttsVoice ?? defaultConfig.ttsVoice,
+      vadSensitivity: vadSensitivity ?? defaultConfig.vadSensitivity,
+      ...(sampleRate !== undefined && { sampleRate }),
+      ...(bufferSize !== undefined && { bufferSize }),
+    })
+  }, [sttModel, ttsVoice, vadSensitivity, sampleRate, bufferSize])
 
   const value: EdgeSpeechContextValue = {
     addListener: SwitchboardVoiceModule.addListener,

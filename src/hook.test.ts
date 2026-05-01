@@ -21,11 +21,9 @@ jest.mock('../src/SwitchboardVoiceModule', () => ({
   },
 }))
 
-const testConfig = { appId: 'test-id', appSecret: 'test-secret' }
-
 // Wrap hook in provider for all tests
 const wrapper = ({ children }: { children: React.ReactNode }) =>
-  React.createElement(EdgeSpeechProvider, { config: testConfig }, children)
+  React.createElement(EdgeSpeechProvider, { appId: 'test-id', appSecret: 'test-secret' }, children)
 
 /** Fire a simulated native event with optional payload */
 function fireNativeEvent(eventName: string, data?: unknown): void {

@@ -15,7 +15,7 @@ export { EdgeSpeech } from './EdgeSpeech'
 
 // Export React provider and hook
 export { EdgeSpeechProvider } from './EdgeSpeechProvider'
-export type { EdgeSpeechConfig, EdgeSpeechContextValue } from './EdgeSpeechProvider'
+export type { EdgeSpeechProviderProps, EdgeSpeechContextValue } from './EdgeSpeechProvider'
 export { useEdgeSpeech } from './hook'
 
 // Export convenience functions that delegate to the native module
