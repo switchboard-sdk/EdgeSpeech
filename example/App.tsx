@@ -53,12 +53,10 @@ function VoiceApp(): React.JSX.Element {
     onTranscriptComplete((text: string) => {
       const userMessage: ConversationMessage = { role: 'user', content: text }
       setConversationHistory((prev) => [...prev, userMessage])
-      setTimeout(() => {
-        chatScrollRef.current?.scrollToEnd({ animated: true })
-      }, 50)
+      setTimeout(() => chatScrollRef.current?.scrollToEnd({ animated: true }), 50)
 
       if (conversationModeRef.current && text.trim()) {
-        handleConversationResponse(text)
+        handleConversationResponse(userMessage)
       }
     })
   }, [onTranscriptComplete])
@@ -116,26 +114,16 @@ function VoiceApp(): React.JSX.Element {
     }
   }
 
-  const handleConversationResponse = async (userText: string) => {
+  const handleConversationResponse = async (userMessage: ConversationMessage) => {
     try {
       await stopListening()
-
-      // Send to chat API (user message already added to history by onTranscriptComplete)
-      const userMessage: ConversationMessage = { role: 'user', content: userText }
-      const t0 = Date.now()
-      const response = await sendToChat(userText, [...conversationHistoryRef.current, userMessage])
-      console.log(`[Chat] LLM took ${Date.now() - t0}ms`)
-
-      // Add assistant response to conversation history
+      const response = await sendToChat(userMessage.content, [
+        ...conversationHistoryRef.current,
+        userMessage,
+      ])
       const assistantMessage: ConversationMessage = { role: 'assistant', content: response }
       setConversationHistory((prev) => [...prev, assistantMessage])
-
-      // Scroll chat to bottom
-      setTimeout(() => {
-        chatScrollRef.current?.scrollToEnd({ animated: true })
-      }, 50)
-
-      // Speak the response
+      setTimeout(() => chatScrollRef.current?.scrollToEnd({ animated: true }), 50)
       await speak(response)
     } catch (error) {
       console.error('Chat error:', error)
