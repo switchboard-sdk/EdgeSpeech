@@ -20,12 +20,6 @@ import { EdgeSpeechProvider, useEdgeSpeech } from '@synervoz/edgespeech'
 const SWITCHBOARD_APP_ID = process.env.EXPO_PUBLIC_SWITCHBOARD_APP_ID ?? ''
 const SWITCHBOARD_APP_SECRET = process.env.EXPO_PUBLIC_SWITCHBOARD_APP_SECRET ?? ''
 
-interface TranscriptHistoryEvent {
-  id: number
-  text: string
-  timestamp: Date
-}
-
 function VoiceApp(): React.JSX.Element {
   const {
     transcript,
@@ -38,13 +32,10 @@ function VoiceApp(): React.JSX.Element {
     requestMicrophonePermission,
   } = useEdgeSpeech()
 
-  const [transcriptHistory, setTranscriptHistory] = useState<TranscriptHistoryEvent[]>([])
   const [textToSpeak, setTextToSpeak] = useState('Hello from EdgeSpeech!')
   const [conversationMode, setConversationMode] = useState(false)
   const [conversationHistory, setConversationHistory] = useState<ConversationMessage[]>([])
-  const transcriptScrollRef = useRef<ScrollView>(null)
   const chatScrollRef = useRef<ScrollView>(null)
-  const nextEventId = useRef(0)
   const conversationModeRef = useRef(conversationMode)
   const conversationHistoryRef = useRef(conversationHistory)
   const prevVoiceStateRef = useRef(voiceState)
@@ -60,14 +51,10 @@ function VoiceApp(): React.JSX.Element {
   // Register final-transcript callback
   useEffect(() => {
     onTranscriptComplete((text: string) => {
-      const historyEvent: TranscriptHistoryEvent = {
-        id: nextEventId.current++,
-        text,
-        timestamp: new Date(),
-      }
-      setTranscriptHistory((prev) => [...prev, historyEvent])
+      const userMessage: ConversationMessage = { role: 'user', content: text }
+      setConversationHistory((prev) => [...prev, userMessage])
       setTimeout(() => {
-        transcriptScrollRef.current?.scrollToEnd({ animated: true })
+        chatScrollRef.current?.scrollToEnd({ animated: true })
       }, 50)
 
       if (conversationModeRef.current && text.trim()) {
@@ -133,11 +120,8 @@ function VoiceApp(): React.JSX.Element {
     try {
       await stopListening()
 
-      // Add user message to conversation history
+      // Send to chat API (user message already added to history by onTranscriptComplete)
       const userMessage: ConversationMessage = { role: 'user', content: userText }
-      setConversationHistory((prev) => [...prev, userMessage])
-
-      // Send to chat API
       const t0 = Date.now()
       const response = await sendToChat(userText, [...conversationHistoryRef.current, userMessage])
       console.log(`[Chat] LLM took ${Date.now() - t0}ms`)
@@ -206,7 +190,7 @@ function VoiceApp(): React.JSX.Element {
           </View>
 
           {/* Chat History */}
-          {conversationMode && conversationHistory.length > 0 && (
+          {conversationHistory.length > 0 && (
             <View style={styles.chatContainer}>
               <View style={styles.chatHeader}>
                 <Text style={styles.chatLabel}>Conversation:</Text>
@@ -260,28 +244,6 @@ function VoiceApp(): React.JSX.Element {
               <Text style={styles.transcriptText}>{transcript}</Text>
             </View>
           ) : null}
-
-          {/* Transcript History - Horizontal Scrolling */}
-          {transcriptHistory.length > 0 && (
-            <View style={styles.historyContainer}>
-              <Text style={styles.transcriptLabel}>History:</Text>
-              <ScrollView
-                ref={transcriptScrollRef}
-                horizontal
-                showsHorizontalScrollIndicator={true}
-                style={styles.historyScroll}
-                contentContainerStyle={styles.historyContent}>
-                {transcriptHistory.map((event) => (
-                  <View key={event.id} style={styles.historyItem}>
-                    <Text style={styles.historyText} numberOfLines={2}>
-                      {event.text}
-                    </Text>
-                    <Text style={styles.historyMeta}>{event.timestamp.toLocaleTimeString()}</Text>
-                  </View>
-                ))}
-              </ScrollView>
-            </View>
-          )}
         </View>
 
         {/* Speaking Section */}
@@ -422,35 +384,6 @@ const styles = StyleSheet.create({
     color: '#999',
     fontSize: 12,
     marginTop: 20,
-  },
-  historyContainer: {
-    marginTop: 15,
-  },
-  historyScroll: {
-    marginTop: 8,
-  },
-  historyContent: {
-    paddingRight: 10,
-    gap: 10,
-  },
-  historyItem: {
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 8,
-    minWidth: 120,
-    maxWidth: 200,
-    backgroundColor: '#e8f5e9',
-    borderWidth: 1,
-    borderColor: '#4CAF50',
-  },
-  historyText: {
-    fontSize: 14,
-    color: '#333',
-    marginBottom: 4,
-  },
-  historyMeta: {
-    fontSize: 10,
-    color: '#666',
   },
   toggleRow: {
     flexDirection: 'row',
