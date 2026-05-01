@@ -23,6 +23,12 @@ export interface EdgeSpeechProviderProps {
   children?: ReactNode
 }
 
+const defaultConfig = {
+  sttModel: 'whisper-base-en',
+  ttsVoice: 'en_GB',
+  vadSensitivity: 0.5,
+}
+
 export function EdgeSpeechProvider({
   appId,
   appSecret,
@@ -43,9 +49,9 @@ export function EdgeSpeechProvider({
 
   useEffect(() => {
     SwitchboardVoiceModule.configure({
-      sttModel: sttModel ?? 'whisper-base-en',
-      ttsVoice: ttsVoice ?? 'en_GB',
-      vadSensitivity: vadSensitivity ?? 0.5,
+      sttModel: sttModel ?? defaultConfig.sttModel,
+      ttsVoice: ttsVoice ?? defaultConfig.ttsVoice,
+      vadSensitivity: vadSensitivity ?? defaultConfig.vadSensitivity,
       ...(sampleRate !== undefined && { sampleRate }),
       ...(bufferSize !== undefined && { bufferSize }),
     })
