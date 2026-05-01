@@ -115,7 +115,7 @@ function VoiceApp(): React.JSX.Element {
     }
   }
 
-  const handleSpeak = async () => {
+  const handleStartSpeaking = async () => {
     try {
       if (!textToSpeak.trim()) {
         Alert.alert('Error', 'Please enter text to speak')
@@ -306,7 +306,9 @@ function VoiceApp(): React.JSX.Element {
             multiline
           />
           <View style={styles.buttonRow}>
-            <TouchableOpacity style={[styles.button, styles.buttonPrimary]} onPress={handleSpeak}>
+            <TouchableOpacity
+              style={[styles.button, styles.buttonPrimary]}
+              onPress={handleStartSpeaking}>
               <Text style={styles.buttonText}>Speak</Text>
             </TouchableOpacity>
             <TouchableOpacity
