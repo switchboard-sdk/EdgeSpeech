@@ -38,12 +38,10 @@ function VoiceApp(): React.JSX.Element {
     requestMicrophonePermission,
   } = useEdgeSpeech()
 
-  const [isListening, setIsListening] = useState(false)
   const [transcriptHistory, setTranscriptHistory] = useState<TranscriptHistoryEvent[]>([])
   const [textToSpeak, setTextToSpeak] = useState('Hello from EdgeSpeech!')
   const [conversationMode, setConversationMode] = useState(false)
   const [conversationHistory, setConversationHistory] = useState<ConversationMessage[]>([])
-  const [isThinking, setIsThinking] = useState(false)
   const transcriptScrollRef = useRef<ScrollView>(null)
   const chatScrollRef = useRef<ScrollView>(null)
   const nextEventId = useRef(0)
@@ -82,9 +80,7 @@ function VoiceApp(): React.JSX.Element {
   useEffect(() => {
     if (prevVoiceStateRef.current === 'speaking' && voiceState === 'idle') {
       if (conversationModeRef.current) {
-        listen()
-          .then(() => setIsListening(true))
-          .catch(console.error)
+        listen().catch(console.error)
       }
     }
     prevVoiceStateRef.current = voiceState
@@ -100,7 +96,6 @@ function VoiceApp(): React.JSX.Element {
       }
 
       await listen()
-      setIsListening(true)
     } catch (error) {
       Alert.alert('Error', (error as Error).message)
     }
@@ -109,7 +104,6 @@ function VoiceApp(): React.JSX.Element {
   const handleStopListening = async () => {
     try {
       await stopListening()
-      setIsListening(false)
     } catch (error) {
       Alert.alert('Error', (error as Error).message)
     }
@@ -137,9 +131,7 @@ function VoiceApp(): React.JSX.Element {
 
   const handleConversationResponse = async (userText: string) => {
     try {
-      setIsThinking(true)
       await stopListening()
-      setIsListening(false)
 
       // Add user message to conversation history
       const userMessage: ConversationMessage = { role: 'user', content: userText }
@@ -154,8 +146,6 @@ function VoiceApp(): React.JSX.Element {
       const assistantMessage: ConversationMessage = { role: 'assistant', content: response }
       setConversationHistory((prev) => [...prev, assistantMessage])
 
-      setIsThinking(false)
-
       // Scroll chat to bottom
       setTimeout(() => {
         chatScrollRef.current?.scrollToEnd({ animated: true })
@@ -164,7 +154,6 @@ function VoiceApp(): React.JSX.Element {
       // Speak the response
       await speak(response)
     } catch (error) {
-      setIsThinking(false)
       console.error('Chat error:', error)
       Alert.alert('Chat Error', (error as Error).message)
     }
@@ -245,7 +234,7 @@ function VoiceApp(): React.JSX.Element {
           )}
 
           {/* Thinking Indicator */}
-          {isThinking && (
+          {voiceState === 'processing' && (
             <View style={styles.thinkingContainer}>
               <Text style={styles.thinkingText}>Thinking...</Text>
             </View>
@@ -257,10 +246,10 @@ function VoiceApp(): React.JSX.Element {
           <Text style={styles.sectionTitle}>Voice Input</Text>
           <View style={styles.buttonRow}>
             <TouchableOpacity
-              style={[styles.button, isListening && styles.buttonActive]}
-              onPress={isListening ? handleStopListening : handleStartListening}>
+              style={[styles.button, voiceState === 'listening' && styles.buttonActive]}
+              onPress={voiceState === 'listening' ? handleStopListening : handleStartListening}>
               <Text style={styles.buttonText}>
-                {isListening ? 'Stop Listening' : 'Start Listening'}
+                {voiceState === 'listening' ? 'Stop Listening' : 'Start Listening'}
               </Text>
             </TouchableOpacity>
           </View>
