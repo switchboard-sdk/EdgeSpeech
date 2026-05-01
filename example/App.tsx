@@ -1,6 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import {
-  SafeAreaView,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -11,157 +10,76 @@ import {
   Alert,
   Switch,
 } from 'react-native'
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context'
 
 import { sendToChat, ConversationMessage } from './services/chatService'
 
-import {
-  SwitchboardVoiceModule,
-  initialize,
-  configure,
-  listen,
-  stopListening,
-  speak,
-  stopSpeaking,
-  requestMicrophonePermission,
-} from '@synervoz/edgespeech'
-import type { VoiceState, TranscriptEvent, StateChangeEvent } from '@synervoz/edgespeech'
-
-// ErrorEvent type for the example
-interface ErrorEvent {
-  code: string
-  message: string
-}
+import { EdgeSpeechProvider, useEdgeSpeech } from '@synervoz/edgespeech'
 
 // Credentials from environment variables (see .env.example)
 const SWITCHBOARD_APP_ID = process.env.EXPO_PUBLIC_SWITCHBOARD_APP_ID ?? ''
 const SWITCHBOARD_APP_SECRET = process.env.EXPO_PUBLIC_SWITCHBOARD_APP_SECRET ?? ''
 
-interface TranscriptHistoryEvent {
-  id: number
-  text: string
-  isFinal: boolean
-  timestamp: Date
-}
+function VoiceApp(): React.JSX.Element {
+  const {
+    transcript,
+    onTranscriptComplete,
+    voiceState,
+    listen,
+    stopListening,
+    speak,
+    stopSpeaking,
+    requestMicrophonePermission,
+  } = useEdgeSpeech()
 
-function App(): React.JSX.Element {
-  const [isConfigured, setIsConfigured] = useState(false)
-  const [isListening, setIsListening] = useState(false)
-  const [transcript, setTranscript] = useState('')
-  const [transcriptHistory, setTranscriptHistory] = useState<TranscriptHistoryEvent[]>([])
-  const [voiceState, setVoiceState] = useState<VoiceState>('idle')
   const [textToSpeak, setTextToSpeak] = useState('Hello from EdgeSpeech!')
   const [conversationMode, setConversationMode] = useState(false)
   const [conversationHistory, setConversationHistory] = useState<ConversationMessage[]>([])
-  const [isThinking, setIsThinking] = useState(false)
-  const transcriptScrollRef = useRef<ScrollView>(null)
   const chatScrollRef = useRef<ScrollView>(null)
-  const nextEventId = useRef(0)
-  const conversationModeRef = useRef(conversationMode)
-  const conversationHistoryRef = useRef(conversationHistory)
+  const prevVoiceStateRef = useRef(voiceState)
 
-  useEffect(() => {
-    conversationModeRef.current = conversationMode
-  }, [conversationMode])
-
-  useEffect(() => {
-    conversationHistoryRef.current = conversationHistory
-  }, [conversationHistory])
-
-  useEffect(() => {
-    // Set up event listeners using Expo module pattern
-    const transcriptSub = SwitchboardVoiceModule.addListener(
-      'onTranscript',
-      (event: TranscriptEvent) => {
-        console.log('Transcript:', event.text, 'Final:', event.isFinal)
-        setTranscript(event.text)
-
-        // Add to history
-        const historyEvent: TranscriptHistoryEvent = {
-          id: nextEventId.current++,
-          text: event.text,
-          isFinal: event.isFinal,
-          timestamp: new Date(),
-        }
-        setTranscriptHistory((prev) => [...prev, historyEvent])
-
-        // Auto-scroll to end
-        setTimeout(() => {
-          transcriptScrollRef.current?.scrollToEnd({ animated: true })
-        }, 50)
-
-        // Handle conversation mode - send final transcripts to chat API
-        if (event.isFinal && event.text.trim() && conversationModeRef.current) {
-          handleConversationResponse(event.text)
-        }
+  const handleConversationResponse = useCallback(
+    async (userMessage: ConversationMessage) => {
+      try {
+        await stopListening()
+        const response = await sendToChat(userMessage.content, [
+          ...conversationHistory,
+          userMessage,
+        ])
+        const assistantMessage: ConversationMessage = { role: 'assistant', content: response }
+        setConversationHistory((prev) => [...prev, assistantMessage])
+        setTimeout(() => chatScrollRef.current?.scrollToEnd({ animated: true }), 50)
+        await speak(response)
+      } catch (error) {
+        console.error('Chat error:', error)
+        Alert.alert('Chat Error', (error as Error).message)
       }
-    )
+    },
+    [conversationHistory, stopListening, speak]
+  )
 
-    const stateSub = SwitchboardVoiceModule.addListener(
-      'onStateChange',
-      (event: StateChangeEvent) => {
-        console.log('State changed to:', event.state)
-        setVoiceState(event.state)
-      }
-    )
+  // Register final-transcript callback
+  useEffect(() => {
+    onTranscriptComplete((text: string) => {
+      const userMessage: ConversationMessage = { role: 'user', content: text }
+      setConversationHistory((prev) => [...prev, userMessage])
+      setTimeout(() => chatScrollRef.current?.scrollToEnd({ animated: true }), 50)
 
-    const interruptedSub = SwitchboardVoiceModule.addListener('onInterrupted', () => {
-      console.log('[Barge-in] User interrupted TTS')
-      // Engine stays running; the barge-in transcript fires next via onTranscript(isFinal).
-    })
-
-    const errorSub = SwitchboardVoiceModule.addListener('onError', (event: ErrorEvent) => {
-      console.error('Voice error:', event)
-      Alert.alert('Error', event.message)
-    })
-
-    const speechStartSub = SwitchboardVoiceModule.addListener('onSpeechStart', () => {
-      console.log('Speech started (VAD detected voice)')
-    })
-
-    const speechEndSub = SwitchboardVoiceModule.addListener('onSpeechEnd', () => {
-      console.log('Speech ended (VAD detected silence)')
-    })
-
-    const ttsCompleteSub = SwitchboardVoiceModule.addListener('onTTSComplete', () => {
-      console.log('TTS playback completed')
-      if (conversationModeRef.current) {
-        listen()
-          .then(() => setIsListening(true))
-          .catch(console.error)
+      if (conversationMode && text.trim()) {
+        handleConversationResponse(userMessage)
       }
     })
+  }, [onTranscriptComplete, conversationMode, handleConversationResponse])
 
-    // Configure on mount
-    handleConfigure()
-
-    // Cleanup on unmount
-    return () => {
-      transcriptSub.remove()
-      stateSub.remove()
-      interruptedSub.remove()
-      errorSub.remove()
-      speechStartSub.remove()
-      speechEndSub.remove()
-      ttsCompleteSub.remove()
-      stopListening().catch(console.error)
+  // Resume listening after TTS completes in conversation mode
+  useEffect(() => {
+    if (prevVoiceStateRef.current === 'speaking' && voiceState === 'idle') {
+      if (conversationMode) {
+        listen().catch(console.error)
+      }
     }
-  }, [])
-
-  const handleConfigure = async () => {
-    try {
-      // Initialize the SDK first
-      initialize(SWITCHBOARD_APP_ID, SWITCHBOARD_APP_SECRET)
-
-      // Then configure additional settings
-      configure({
-        vadSensitivity: 0.5,
-      })
-
-      setIsConfigured(true)
-    } catch (error) {
-      Alert.alert('Configuration Error', (error as Error).message)
-    }
-  }
+    prevVoiceStateRef.current = voiceState
+  }, [voiceState, listen, conversationMode])
 
   const handleStartListening = async () => {
     try {
@@ -173,8 +91,6 @@ function App(): React.JSX.Element {
       }
 
       await listen()
-      setIsListening(true)
-      setTranscript('')
     } catch (error) {
       Alert.alert('Error', (error as Error).message)
     }
@@ -183,13 +99,12 @@ function App(): React.JSX.Element {
   const handleStopListening = async () => {
     try {
       await stopListening()
-      setIsListening(false)
     } catch (error) {
       Alert.alert('Error', (error as Error).message)
     }
   }
 
-  const handleSpeak = async () => {
+  const handleStartSpeaking = async () => {
     try {
       if (!textToSpeak.trim()) {
         Alert.alert('Error', 'Please enter text to speak')
@@ -206,41 +121,6 @@ function App(): React.JSX.Element {
       await stopSpeaking()
     } catch (error) {
       Alert.alert('Error', (error as Error).message)
-    }
-  }
-
-  const handleConversationResponse = async (userText: string) => {
-    try {
-      setIsThinking(true)
-      await stopListening()
-      setIsListening(false)
-
-      // Add user message to conversation history
-      const userMessage: ConversationMessage = { role: 'user', content: userText }
-      setConversationHistory((prev) => [...prev, userMessage])
-
-      // Send to chat API
-      const t0 = Date.now()
-      const response = await sendToChat(userText, [...conversationHistoryRef.current, userMessage])
-      console.log(`[Chat] LLM took ${Date.now() - t0}ms`)
-
-      // Add assistant response to conversation history
-      const assistantMessage: ConversationMessage = { role: 'assistant', content: response }
-      setConversationHistory((prev) => [...prev, assistantMessage])
-
-      setIsThinking(false)
-
-      // Scroll chat to bottom
-      setTimeout(() => {
-        chatScrollRef.current?.scrollToEnd({ animated: true })
-      }, 50)
-
-      // Speak the response
-      await speak(response)
-    } catch (error) {
-      setIsThinking(false)
-      console.error('Chat error:', error)
-      Alert.alert('Chat Error', (error as Error).message)
     }
   }
 
@@ -275,14 +155,6 @@ function App(): React.JSX.Element {
           <Text style={styles.statusText}>Status: {voiceState}</Text>
         </View>
 
-        {!isConfigured && (
-          <View style={styles.warningBox}>
-            <Text style={styles.warningText}>
-              Update .env with your Switchboard app credentials
-            </Text>
-          </View>
-        )}
-
         {/* Conversation Mode Toggle */}
         <View style={styles.section}>
           <View style={styles.toggleRow}>
@@ -299,7 +171,7 @@ function App(): React.JSX.Element {
           </View>
 
           {/* Chat History */}
-          {conversationMode && conversationHistory.length > 0 && (
+          {conversationHistory.length > 0 && (
             <View style={styles.chatContainer}>
               <View style={styles.chatHeader}>
                 <Text style={styles.chatLabel}>Conversation:</Text>
@@ -327,7 +199,7 @@ function App(): React.JSX.Element {
           )}
 
           {/* Thinking Indicator */}
-          {isThinking && (
+          {voiceState === 'processing' && (
             <View style={styles.thinkingContainer}>
               <Text style={styles.thinkingText}>Thinking...</Text>
             </View>
@@ -339,11 +211,10 @@ function App(): React.JSX.Element {
           <Text style={styles.sectionTitle}>Voice Input</Text>
           <View style={styles.buttonRow}>
             <TouchableOpacity
-              style={[styles.button, isListening && styles.buttonActive]}
-              onPress={isListening ? handleStopListening : handleStartListening}
-              disabled={!isConfigured}>
+              style={[styles.button, voiceState === 'listening' && styles.buttonActive]}
+              onPress={voiceState === 'listening' ? handleStopListening : handleStartListening}>
               <Text style={styles.buttonText}>
-                {isListening ? 'Stop Listening' : 'Start Listening'}
+                {voiceState === 'listening' ? 'Stop Listening' : 'Start Listening'}
               </Text>
             </TouchableOpacity>
           </View>
@@ -354,35 +225,6 @@ function App(): React.JSX.Element {
               <Text style={styles.transcriptText}>{transcript}</Text>
             </View>
           ) : null}
-
-          {/* Transcript History - Horizontal Scrolling */}
-          {transcriptHistory.length > 0 && (
-            <View style={styles.historyContainer}>
-              <Text style={styles.transcriptLabel}>History:</Text>
-              <ScrollView
-                ref={transcriptScrollRef}
-                horizontal
-                showsHorizontalScrollIndicator={true}
-                style={styles.historyScroll}
-                contentContainerStyle={styles.historyContent}>
-                {transcriptHistory.map((event) => (
-                  <View
-                    key={event.id}
-                    style={[
-                      styles.historyItem,
-                      event.isFinal ? styles.historyItemFinal : styles.historyItemInterim,
-                    ]}>
-                    <Text style={styles.historyText} numberOfLines={2}>
-                      {event.text}
-                    </Text>
-                    <Text style={styles.historyMeta}>
-                      {event.isFinal ? 'Final' : 'Interim'} • {event.timestamp.toLocaleTimeString()}
-                    </Text>
-                  </View>
-                ))}
-              </ScrollView>
-            </View>
-          )}
         </View>
 
         {/* Speaking Section */}
@@ -398,14 +240,12 @@ function App(): React.JSX.Element {
           <View style={styles.buttonRow}>
             <TouchableOpacity
               style={[styles.button, styles.buttonPrimary]}
-              onPress={handleSpeak}
-              disabled={!isConfigured}>
+              onPress={handleStartSpeaking}>
               <Text style={styles.buttonText}>Speak</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.button, styles.buttonDanger]}
-              onPress={handleStopSpeaking}
-              disabled={!isConfigured}>
+              onPress={handleStopSpeaking}>
               <Text style={styles.buttonText}>Stop Speaking</Text>
             </TouchableOpacity>
           </View>
@@ -451,19 +291,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#333',
-  },
-  warningBox: {
-    backgroundColor: '#fff3cd',
-    padding: 15,
-    borderRadius: 8,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: '#ffc107',
-  },
-  warningText: {
-    color: '#856404',
-    fontSize: 14,
-    textAlign: 'center',
   },
   section: {
     backgroundColor: '#fff',
@@ -538,42 +365,6 @@ const styles = StyleSheet.create({
     color: '#999',
     fontSize: 12,
     marginTop: 20,
-  },
-  historyContainer: {
-    marginTop: 15,
-  },
-  historyScroll: {
-    marginTop: 8,
-  },
-  historyContent: {
-    paddingRight: 10,
-    gap: 10,
-  },
-  historyItem: {
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 8,
-    minWidth: 120,
-    maxWidth: 200,
-  },
-  historyItemFinal: {
-    backgroundColor: '#e8f5e9',
-    borderWidth: 1,
-    borderColor: '#4CAF50',
-  },
-  historyItemInterim: {
-    backgroundColor: '#fff3e0',
-    borderWidth: 1,
-    borderColor: '#FF9800',
-  },
-  historyText: {
-    fontSize: 14,
-    color: '#333',
-    marginBottom: 4,
-  },
-  historyMeta: {
-    fontSize: 10,
-    color: '#666',
   },
   toggleRow: {
     flexDirection: 'row',
@@ -650,4 +441,15 @@ const styles = StyleSheet.create({
   },
 })
 
-export default App
+export default function App(): React.JSX.Element {
+  return (
+    <SafeAreaProvider>
+      <EdgeSpeechProvider
+        appId={SWITCHBOARD_APP_ID}
+        appSecret={SWITCHBOARD_APP_SECRET}
+        vadSensitivity={0.5}>
+        <VoiceApp />
+      </EdgeSpeechProvider>
+    </SafeAreaProvider>
+  )
+}
