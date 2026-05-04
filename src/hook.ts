@@ -10,6 +10,7 @@ export function useEdgeSpeech() {
   const transcriptCompleteCallback = useRef<((text: string) => void) | null>(null)
   const [voiceState, setVoiceState] = useState<VoiceState>('idle')
   const [error, setError] = useState<string | null>(null)
+  const interruptedCallback = useRef<(() => void) | null>(null)
 
   useEffect(() => {
     const transcriptSub = addListener('onTranscript', ({ text, isFinal }) => {
@@ -25,6 +26,10 @@ export function useEdgeSpeech() {
       setVoiceState(state)
     })
 
+    const interruptedSub = addListener('onInterrupted', () => {
+      interruptedCallback.current?.()
+    })
+
     const errorSub = addListener('onError', ({ message }) => {
       setError(message)
     })
@@ -32,12 +37,17 @@ export function useEdgeSpeech() {
     return () => {
       transcriptSub.remove()
       stateSub.remove()
+      interruptedSub.remove()
       errorSub.remove()
     }
   }, [addListener])
 
   const onTranscriptComplete = useCallback((cb: (text: string) => void) => {
     transcriptCompleteCallback.current = cb
+  }, [])
+
+  const onInterrupted = useCallback((cb: () => void) => {
+    interruptedCallback.current = cb
   }, [])
 
   const wrappedListen = useCallback(async () => {
@@ -87,6 +97,7 @@ export function useEdgeSpeech() {
   return {
     transcript,
     onTranscriptComplete,
+    onInterrupted,
     voiceState,
     error,
     listen: wrappedListen,
