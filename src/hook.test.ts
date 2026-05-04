@@ -285,4 +285,68 @@ describe('useEdgeSpeech', () => {
       expect(result.current.error).toBe('permission denied')
     })
   })
+
+  describe('hasMicrophonePermission', () => {
+    it('starts as null before permission is requested', () => {
+      const { result } = renderHook(() => useEdgeSpeech(), { wrapper })
+      expect(result.current.hasMicrophonePermission).toBeNull()
+    })
+
+    it('is true after permission is granted', async () => {
+      jest.mocked(SwitchboardVoiceModule.requestMicrophonePermission).mockResolvedValueOnce(true)
+
+      const { result } = renderHook(() => useEdgeSpeech(), { wrapper })
+
+      await act(async () => {
+        await result.current.requestMicrophonePermission()
+      })
+
+      expect(result.current.hasMicrophonePermission).toBe(true)
+    })
+
+    it('is false after permission is denied', async () => {
+      jest.mocked(SwitchboardVoiceModule.requestMicrophonePermission).mockResolvedValueOnce(false)
+
+      const { result } = renderHook(() => useEdgeSpeech(), { wrapper })
+
+      await act(async () => {
+        await result.current.requestMicrophonePermission()
+      })
+
+      expect(result.current.hasMicrophonePermission).toBe(false)
+    })
+
+    it('is false after permission request rejects', async () => {
+      jest
+        .mocked(SwitchboardVoiceModule.requestMicrophonePermission)
+        .mockRejectedValueOnce(new Error('permission denied'))
+
+      const { result } = renderHook(() => useEdgeSpeech(), { wrapper })
+
+      await act(async () => {
+        await result.current.requestMicrophonePermission()
+      })
+
+      expect(result.current.hasMicrophonePermission).toBe(false)
+    })
+
+    it('updates when called multiple times', async () => {
+      jest
+        .mocked(SwitchboardVoiceModule.requestMicrophonePermission)
+        .mockResolvedValueOnce(false)
+        .mockResolvedValueOnce(true)
+
+      const { result } = renderHook(() => useEdgeSpeech(), { wrapper })
+
+      await act(async () => {
+        await result.current.requestMicrophonePermission()
+      })
+      expect(result.current.hasMicrophonePermission).toBe(false)
+
+      await act(async () => {
+        await result.current.requestMicrophonePermission()
+      })
+      expect(result.current.hasMicrophonePermission).toBe(true)
+    })
+  })
 })
