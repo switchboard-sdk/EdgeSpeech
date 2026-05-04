@@ -10,6 +10,7 @@ export function useEdgeSpeech() {
   const transcriptCompleteCallback = useRef<((text: string) => void) | null>(null)
   const [voiceState, setVoiceState] = useState<VoiceState>('idle')
   const [error, setError] = useState<string | null>(null)
+  const [hasMicrophonePermission, setHasMicrophonePermission] = useState<boolean | null>(null)
   const interruptedCallback = useRef<(() => void) | null>(null)
 
   useEffect(() => {
@@ -87,9 +88,12 @@ export function useEdgeSpeech() {
 
   const wrappedRequestMicrophonePermission = useCallback(async () => {
     try {
-      return await requestMicrophonePermission()
+      const granted = await requestMicrophonePermission()
+      setHasMicrophonePermission(granted)
+      return granted
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
+      setHasMicrophonePermission(false)
       return false
     }
   }, [requestMicrophonePermission])
@@ -100,6 +104,7 @@ export function useEdgeSpeech() {
     onInterrupted,
     voiceState,
     error,
+    hasMicrophonePermission,
     listen: wrappedListen,
     stopListening: wrappedStopListening,
     speak: wrappedSpeak,
