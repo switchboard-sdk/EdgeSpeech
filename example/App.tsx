@@ -24,6 +24,7 @@ function VoiceApp(): React.JSX.Element {
   const {
     transcript,
     onTranscriptComplete,
+    onInterrupted,
     voiceState,
     listen,
     stopListening,
@@ -56,6 +57,14 @@ function VoiceApp(): React.JSX.Element {
     },
     [conversationHistory, stopListening, speak]
   )
+
+  // Register interrupted callback
+  useEffect(() => {
+    onInterrupted(() => {
+      setConversationHistory((prev) => [...prev, { role: 'assistant', content: '[interrupted]' }])
+      setTimeout(() => chatScrollRef.current?.scrollToEnd({ animated: true }), 50)
+    })
+  }, [onInterrupted])
 
   // Register final-transcript callback
   useEffect(() => {
@@ -170,6 +179,7 @@ function VoiceApp(): React.JSX.Element {
                     style={[
                       styles.chatBubble,
                       msg.role === 'user' ? styles.userBubble : styles.assistantBubble,
+                      msg.content === '[interrupted]' && styles.interruptedBubble,
                     ]}>
                     <Text style={styles.chatRole}>{msg.role === 'user' ? 'You' : 'Assistant'}</Text>
                     <Text style={styles.chatText}>{msg.content}</Text>
@@ -396,6 +406,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#f5f5f5',
     alignSelf: 'flex-start',
     borderBottomLeftRadius: 4,
+  },
+  interruptedBubble: {
+    backgroundColor: '#fce4ec',
+    alignSelf: 'center',
+    borderRadius: 12,
   },
   chatRole: {
     fontSize: 10,
