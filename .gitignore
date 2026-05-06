@@ -14,7 +14,8 @@ vendor/bundle/
 tmp/
 
 # Created by post install
-ios/
+ios/*/
+!ios/*.swift
 
 # Credentials
 example/credentials.ts
