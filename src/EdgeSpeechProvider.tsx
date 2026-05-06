@@ -58,7 +58,8 @@ export function EdgeSpeechProvider({
   }, [sttModel, ttsVoice, vadSensitivity, sampleRate, bufferSize])
 
   const value: EdgeSpeechContextValue = {
-    addListener: SwitchboardVoiceModule.addListener,
+    // Keep NativeModule method bound to avoid losing JSI `this` context.
+    addListener: SwitchboardVoiceModule.addListener.bind(SwitchboardVoiceModule),
     listen: () => SwitchboardVoiceModule.listen(),
     stopListening: () => SwitchboardVoiceModule.stopListening(),
     speak: (text) => SwitchboardVoiceModule.speak(text),
