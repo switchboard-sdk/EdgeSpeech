@@ -8,7 +8,7 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.switchboard.voiceexample",
+      "bundleIdentifier": "com.switchboard.voiceexample2",
       "infoPlist": {
         "NSMicrophoneUsageDescription": "This app needs microphone access for voice recognition"
       },
@@ -19,7 +19,7 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.switchboard.voiceexample"
+      "package": "com.switchboard.voiceexample2"
     }
   }
 }

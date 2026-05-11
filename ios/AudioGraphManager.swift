@@ -340,8 +340,7 @@ class AudioGraphManager {
         // Output path nodes
         let ttsNode: [String: Any] = [
             "id": "ttsNode",
-            "type": "Sherpa.TTS",
-            "config": ["voice": ttsVoice]
+            "type": "Sherpa.TTS"
         ]
         let monoToMultiChannelNode: [String: Any] = [
             "id": "monoToMultiChannelNode",
