@@ -38,6 +38,8 @@
     "vad",
     "edgespeech",
     "whisper",
+    "silero",
+    "switchboard",
     "on-device"
   ],
   "author": "Thom Leigh",
