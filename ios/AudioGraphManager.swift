@@ -390,13 +390,10 @@ class AudioGraphManager {
             print("[AudioGraphManager] STT 'transcribed' event fired! Data: \(String(describing: eventData))")
 
             var transcriptText: String?
-            if let text = eventData as? String {
+            if let data = eventData["data"] as? [String: Any],
+               let text = data["text"] as? String {
                 transcriptText = text
-            } else if let dict = eventData as? [AnyHashable: Any],
-                      let data = dict["data"] as? [String: Any],
-                      let text = data["text"] as? String {
-                transcriptText = text
-            } else if let dict = eventData as? [String: Any], let text = dict["text"] as? String {
+            } else if let text = eventData["text"] as? String {
                 transcriptText = text
             }
 
@@ -480,8 +477,7 @@ class AudioGraphManager {
         }
 
         // TTS synthesis started
-        let synthesisStartedResult = Switchboard.addEventListener("ttsNode", eventName: "synthesisStarted") { [weak self] eventData in
-            guard let self = self else { return }
+        let synthesisStartedResult = Switchboard.addEventListener("ttsNode", eventName: "synthesisStarted") { eventData in
             print("[AudioGraphManager] TTS 'synthesisStarted' event fired")
         }
 
