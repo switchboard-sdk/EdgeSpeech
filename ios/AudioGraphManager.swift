@@ -325,17 +325,22 @@ class AudioGraphManager {
                 "minSilenceDurationMs": 100
             ]
         ]
+        // Metal GPU is not available in the iOS Simulator (_xpc_shmem_create_with_prot crashes)
+        #if targetEnvironment(simulator)
+        let useGPU = false
+        #else
+        let useGPU = true
+        #endif
         let sttNode: [String: Any] = [
             "id": "sttNode",
             "type": "Whisper.STT",
-            "config": ["initializeModel": true, "useGPU": true]
+            "config": ["initializeModel": true, "useGPU": useGPU]
         ]
 
         // Output path nodes
         let ttsNode: [String: Any] = [
             "id": "ttsNode",
-            "type": "Sherpa.TTS",
-            "config": ["voice": ttsVoice]
+            "type": "Sherpa.TTS"
         ]
         let monoToMultiChannelNode: [String: Any] = [
             "id": "monoToMultiChannelNode",
