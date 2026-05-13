@@ -15,6 +15,7 @@ tmp/
 
 # Created by post install
 ios/
+!/ios/*.swift
 
 # Credentials
 example/credentials.ts
