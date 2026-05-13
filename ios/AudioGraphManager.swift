@@ -385,11 +385,8 @@ class AudioGraphManager {
             print("[AudioGraphManager] STT 'transcribed' event fired! Data: \(String(describing: eventData))")
 
             var transcriptText: String?
-            if let text = eventData as? String {
-                transcriptText = text
-            } else if let dict = eventData as? [AnyHashable: Any],
-                      let data = dict["data"] as? [String: Any],
-                      let text = data["text"] as? String {
+            if let data = eventData["data"] as? [String: Any],
+               let text = data["text"] as? String {
                 transcriptText = text
             } else if let dict = eventData as? [String: Any], let text = dict["text"] as? String {
                 transcriptText = text
