@@ -28,6 +28,8 @@ Edit `.env` with your Switchboard App ID and App Secret.
 
 3. Set up iOS code signing for your device:
 
+Follow [these instructions first](https://docs.expo.dev/get-started/set-up-your-environment/?platform=ios&device=physical&mode=development-build&buildEnv=local).
+
 a. Open the Xcode workspace:
 
 ```bash
