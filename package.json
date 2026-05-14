@@ -6,7 +6,6 @@
   "types": "dist/index.d.ts",
   "exports": {
     ".": {
-      "import": "./dist/index.js",
       "require": "./dist/index.js",
       "types": "./dist/index.d.ts"
     }
@@ -20,7 +19,7 @@
     "README.md"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
     "postinstall": "node scripts/postinstall.js",
     "test": "jest --verbose",
     "test:integration": "jest --config jest.integration.config.js",
@@ -39,6 +38,8 @@
     "vad",
     "edgespeech",
     "whisper",
+    "silero",
+    "switchboard",
     "on-device"
   ],
   "author": "Thom Leigh",

@@ -1,0 +1,50 @@
+# Source files (consumers use dist/)
+src/
+
+# Test files
+__tests__/
+specs/
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.ts
+**/*.spec.tsx
+dist/**/*.test.js
+dist/**/*.test.d.ts
+dist/**/*.test.d.ts.map
+
+# Example app
+example/
+
+# Scripts directory (scripts/postinstall.js is whitelisted via files in package.json)
+scripts/
+
+# iOS native frameworks and integration tests
+ios/Frameworks/
+ios/integration/
+
+# Shared native TurboModule stubs
+shared/
+
+# Dev config
+babel.config.js
+eslint.config.js
+metro.config.js
+jest.config.js
+jest.integration.config.js
+tsconfig.json
+tsconfig.build.json
+
+# Build artifacts
+*.tsbuildinfo
+
+# Development docs and project management
+TODO.md
+PROGRESS.md
+
+# Misc
+.expo/
+tmp/
+Gemfile
+Gemfile.lock
+app.json
+assets/
