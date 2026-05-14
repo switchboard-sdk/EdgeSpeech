@@ -55,8 +55,19 @@ export interface StateChangeEvent {
   /** New voice state */
   state: VoiceState
 
-  /** Previous voice state */
-  previousState: VoiceState
+  /** Previous voice state (may be absent on first emission) */
+  previousState?: VoiceState
+}
+
+/**
+ * Error event payload emitted by the native module
+ */
+export interface ErrorEvent {
+  /** Machine-readable error code */
+  code: string
+
+  /** Human-readable error message */
+  message: string
 }
 
 /**
