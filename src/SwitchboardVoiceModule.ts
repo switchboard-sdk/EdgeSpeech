@@ -1,21 +1,7 @@
 import { NativeModule, requireNativeModule } from 'expo-modules-core'
+import type { VoiceState, TranscriptEvent, StateChangeEvent, ErrorEvent } from './types'
 
-// Event payload types
-export interface TranscriptEvent {
-  text: string
-  isFinal: boolean
-}
-
-export interface StateChangeEvent {
-  state: VoiceState
-}
-
-export interface ErrorEvent {
-  code: string
-  message: string
-}
-
-export type VoiceState = 'idle' | 'listening' | 'processing' | 'speaking'
+export type { VoiceState, TranscriptEvent, StateChangeEvent, ErrorEvent }
 
 // Native module type declaration
 declare class SwitchboardVoiceModuleType extends NativeModule<{
@@ -28,7 +14,7 @@ declare class SwitchboardVoiceModuleType extends NativeModule<{
   onTTSComplete: () => void
 }> {
   initialize(appId: string, appSecret: string): void
-  configure(config: Record<string, any>): void
+  configure(config: Record<string, unknown>): void
   listen(): Promise<void>
   stopListening(): Promise<void>
   speak(text: string): Promise<void>

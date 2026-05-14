@@ -100,6 +100,92 @@ describe('EdgeSpeechProvider', () => {
     )
   })
 
+  describe('prop validation', () => {
+    it('throws when appId is empty', () => {
+      const badWrapper = ({ children }: { children: React.ReactNode }) =>
+        React.createElement(
+          EdgeSpeechProvider,
+          { appId: '', appSecret: 'test-secret' },
+          children
+        )
+      expect(() => renderHook(() => useEdgeSpeechContext(), { wrapper: badWrapper })).toThrow(
+        'EdgeSpeechProvider: appId is required'
+      )
+    })
+
+    it('throws when appId is whitespace only', () => {
+      const badWrapper = ({ children }: { children: React.ReactNode }) =>
+        React.createElement(
+          EdgeSpeechProvider,
+          { appId: '   ', appSecret: 'test-secret' },
+          children
+        )
+      expect(() => renderHook(() => useEdgeSpeechContext(), { wrapper: badWrapper })).toThrow(
+        'EdgeSpeechProvider: appId is required'
+      )
+    })
+
+    it('throws when appSecret is empty', () => {
+      const badWrapper = ({ children }: { children: React.ReactNode }) =>
+        React.createElement(
+          EdgeSpeechProvider,
+          { appId: 'test-id', appSecret: '' },
+          children
+        )
+      expect(() => renderHook(() => useEdgeSpeechContext(), { wrapper: badWrapper })).toThrow(
+        'EdgeSpeechProvider: appSecret is required'
+      )
+    })
+
+    it('throws when vadSensitivity is above 1.0', () => {
+      const badWrapper = ({ children }: { children: React.ReactNode }) =>
+        React.createElement(
+          EdgeSpeechProvider,
+          { appId: 'test-id', appSecret: 'test-secret', vadSensitivity: 1.5 },
+          children
+        )
+      expect(() => renderHook(() => useEdgeSpeechContext(), { wrapper: badWrapper })).toThrow(
+        'EdgeSpeechProvider: vadSensitivity must be between 0.0 and 1.0'
+      )
+    })
+
+    it('throws when vadSensitivity is below 0.0', () => {
+      const badWrapper = ({ children }: { children: React.ReactNode }) =>
+        React.createElement(
+          EdgeSpeechProvider,
+          { appId: 'test-id', appSecret: 'test-secret', vadSensitivity: -0.1 },
+          children
+        )
+      expect(() => renderHook(() => useEdgeSpeechContext(), { wrapper: badWrapper })).toThrow(
+        'EdgeSpeechProvider: vadSensitivity must be between 0.0 and 1.0'
+      )
+    })
+
+    it('throws when sttModel is an empty string', () => {
+      const badWrapper = ({ children }: { children: React.ReactNode }) =>
+        React.createElement(
+          EdgeSpeechProvider,
+          { appId: 'test-id', appSecret: 'test-secret', sttModel: '  ' },
+          children
+        )
+      expect(() => renderHook(() => useEdgeSpeechContext(), { wrapper: badWrapper })).toThrow(
+        'EdgeSpeechProvider: sttModel cannot be an empty string'
+      )
+    })
+
+    it('throws when ttsVoice is an empty string', () => {
+      const badWrapper = ({ children }: { children: React.ReactNode }) =>
+        React.createElement(
+          EdgeSpeechProvider,
+          { appId: 'test-id', appSecret: 'test-secret', ttsVoice: '' },
+          children
+        )
+      expect(() => renderHook(() => useEdgeSpeechContext(), { wrapper: badWrapper })).toThrow(
+        'EdgeSpeechProvider: ttsVoice cannot be an empty string'
+      )
+    })
+  })
+
   describe('exposed methods delegate to native module', () => {
     it('listen()', async () => {
       const { result } = renderHook(() => useEdgeSpeechContext(), { wrapper })

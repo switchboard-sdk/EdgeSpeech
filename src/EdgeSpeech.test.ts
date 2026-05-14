@@ -61,16 +61,48 @@ describe('EdgeSpeech', () => {
       await expect(EdgeSpeech.configure(config)).resolves.toBeUndefined()
     })
 
-    it('should validate vadSensitivity range', async () => {
+    it('should validate vadSensitivity range (above 1.0)', async () => {
       const config: VoiceConfig = {
         appId: 'test-id',
         appSecret: 'test-secret',
-        vadSensitivity: 1.5, // Invalid: > 1.0
+        vadSensitivity: 1.5,
       }
 
       await expect(EdgeSpeech.configure(config)).rejects.toThrow(
         'vadSensitivity must be between 0.0 and 1.0'
       )
+    })
+
+    it('should validate vadSensitivity range (below 0.0)', async () => {
+      const config: VoiceConfig = {
+        appId: 'test-id',
+        appSecret: 'test-secret',
+        vadSensitivity: -0.1,
+      }
+
+      await expect(EdgeSpeech.configure(config)).rejects.toThrow(
+        'vadSensitivity must be between 0.0 and 1.0'
+      )
+    })
+
+    it('should reject empty sttModel string', async () => {
+      const config: VoiceConfig = {
+        appId: 'test-id',
+        appSecret: 'test-secret',
+        sttModel: '   ',
+      }
+
+      await expect(EdgeSpeech.configure(config)).rejects.toThrow('sttModel cannot be an empty string')
+    })
+
+    it('should reject empty ttsVoice string', async () => {
+      const config: VoiceConfig = {
+        appId: 'test-id',
+        appSecret: 'test-secret',
+        ttsVoice: '',
+      }
+
+      await expect(EdgeSpeech.configure(config)).rejects.toThrow('ttsVoice cannot be an empty string')
     })
   })
 
