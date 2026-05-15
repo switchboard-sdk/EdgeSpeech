@@ -83,6 +83,14 @@ class EdgeSpeechAPI {
       throw new Error('vadSensitivity must be between 0.0 and 1.0')
     }
 
+    if (config.sttModel !== undefined && config.sttModel.trim() === '') {
+      throw new Error('sttModel cannot be an empty string')
+    }
+
+    if (config.ttsVoice !== undefined && config.ttsVoice.trim() === '') {
+      throw new Error('ttsVoice cannot be an empty string')
+    }
+
     // Apply defaults
     const finalConfig = {
       appId: config.appId,

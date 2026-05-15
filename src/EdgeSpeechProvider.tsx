@@ -39,6 +39,22 @@ export function EdgeSpeechProvider({
   bufferSize,
   children,
 }: EdgeSpeechProviderProps) {
+  if (!appId || appId.trim() === '') {
+    throw new Error('EdgeSpeechProvider: appId is required')
+  }
+  if (!appSecret || appSecret.trim() === '') {
+    throw new Error('EdgeSpeechProvider: appSecret is required')
+  }
+  if (vadSensitivity !== undefined && (vadSensitivity < 0.0 || vadSensitivity > 1.0)) {
+    throw new Error('EdgeSpeechProvider: vadSensitivity must be between 0.0 and 1.0')
+  }
+  if (sttModel !== undefined && sttModel.trim() === '') {
+    throw new Error('EdgeSpeechProvider: sttModel cannot be an empty string')
+  }
+  if (ttsVoice !== undefined && ttsVoice.trim() === '') {
+    throw new Error('EdgeSpeechProvider: ttsVoice cannot be an empty string')
+  }
+
   useEffect(() => {
     SwitchboardVoiceModule.initialize(appId, appSecret)
 

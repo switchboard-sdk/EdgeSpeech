@@ -54,6 +54,7 @@ export type {
   VoiceConfig,
   VoiceState,
   VoiceError,
+  ErrorEvent,
   TranscriptEvent,
   StateChangeEvent,
   TranscriptCallback,
