@@ -18,6 +18,9 @@ Pod::Spec.new do |s|
   # Only include Swift source files (Expo modules don't need Obj-C bridge)
   s.source_files = 'ios/*.swift'
 
+  # Privacy manifest — required for App Store submissions (Apple policy, May 2024+)
+  s.resource_bundles = { 'edgespeech_Privacy' => ['ios/PrivacyInfo.xcprivacy'] }
+
   # Switchboard SDK frameworks - downloaded automatically via postinstall script
   # Auto-discover Whisper lib frameworks (layout changed between SDK versions)
   whisper_lib_frameworks = Dir[File.join(__dir__, 'ios/Frameworks/SwitchboardWhisper/ios/Release/lib/*.xcframework')].map { |f| f.sub("#{__dir__}/", '') }
