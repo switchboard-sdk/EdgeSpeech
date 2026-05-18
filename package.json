@@ -45,7 +45,8 @@
   "author": "Thom Leigh",
   "license": "MIT",
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "provenance": true
   },
   "homepage": "https://github.com/switchboard-sdk/EdgeSpeech#readme",
   "repository": {
