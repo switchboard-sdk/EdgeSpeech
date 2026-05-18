@@ -261,7 +261,7 @@ git tag vX.Y.Z
 git push origin main --tags
 ```
 
-The [release workflow](.github/workflows/release.yml) builds the package and runs `npm publish`. Requires an `NPM_TOKEN` secret configured in the repository settings.
+The [release workflow](.github/workflows/release.yml) builds the package and publishes to npm under the `@synervoz` scope using `npm publish --access public`. Requires an `NPM_TOKEN` secret configured in the repository settings.
 
 ## Tests
 
