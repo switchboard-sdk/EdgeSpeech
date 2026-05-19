@@ -290,12 +290,12 @@ flowchart TB
 
 ## Requirements
 
-| Requirement | Minimum | Notes |
-|-------------|---------|-------|
-| React Native | 0.74+ | Declared in `peerDependencies`; not enforced at install time |
-| iOS | 13.4+ | Enforced by the podspec (`s.platforms = { :ios => "13.4" }`) |
-| Node.js | 20+ | Required for all tooling; `engines` field in `package.json` specifies `>=22` |
-| expo-modules-core | 2.0.0+ | Required peer dependency; included automatically with Expo, must be installed explicitly for bare React Native |
+| Requirement       | Minimum | Notes                                                                                                          |
+| ----------------- | ------- | -------------------------------------------------------------------------------------------------------------- |
+| React Native      | 0.74+   | Declared in `peerDependencies`; not enforced at install time                                                   |
+| iOS               | 13.4+   | Enforced by the podspec (`s.platforms = { :ios => "13.4" }`)                                                   |
+| Node.js           | 20+     | Required for all tooling; `engines` field in `package.json` specifies `>=22`                                   |
+| expo-modules-core | 2.0.0+  | Required peer dependency; included automatically with Expo, must be installed explicitly for bare React Native |
 
 ## Get Switchboard Credentials
 
