@@ -1,6 +1,6 @@
 {
   "name": "@synervoz/edgespeech",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "React Native library for on-device voice processing with Switchboard SDK",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -45,7 +45,8 @@
   "author": "Thom Leigh",
   "license": "MIT",
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "provenance": true
   },
   "homepage": "https://github.com/switchboard-sdk/EdgeSpeech#readme",
   "repository": {
