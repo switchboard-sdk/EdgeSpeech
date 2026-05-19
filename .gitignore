@@ -22,3 +22,6 @@ example/credentials.ts
 
 # Dev session logs
 PROGRESS.md
+
+# Claude Code internal memory
+memory/
