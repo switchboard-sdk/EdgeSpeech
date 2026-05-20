@@ -4,14 +4,17 @@
  * Downloads Switchboard SDK frameworks from S3
  */
 
-const https = require('https')
 const fs = require('fs')
 const path = require('path')
 const { execSync } = require('child_process')
+const { S3Client, GetObjectCommand } = require('@aws-sdk/client-s3')
+const { defaultProvider } = require('@aws-sdk/credential-provider-node')
 const { intro, outro, log, note, tasks } = require('@clack/prompts')
 
 const SDK_VERSION = 'release/3.2.0'
-const SDK_BASE_URL = 'https://switchboard-sdk-public.s3.amazonaws.com/builds'
+const BUCKET_NAME = 'switchboard-sdk-public'
+const BUCKET_REGION = 'us-east-1'
+const SDK_KEY_PREFIX = `builds/${SDK_VERSION}/ios`
 
 const PACKAGES = [
   'SwitchboardSDK',
@@ -25,41 +28,51 @@ const SCRIPT_DIR = __dirname
 const PACKAGE_ROOT = path.dirname(SCRIPT_DIR)
 const FRAMEWORKS_DIR = path.join(PACKAGE_ROOT, 'ios', 'Frameworks')
 
-function downloadFile(url, dest) {
-  return new Promise((resolve, reject) => {
-    const file = fs.createWriteStream(dest)
-    https
-      .get(url, (response) => {
-        if (response.statusCode === 301 || response.statusCode === 302) {
-          downloadFile(response.headers.location, dest).then(resolve).catch(reject)
-          return
-        }
-        if (response.statusCode !== 200) {
-          reject(new Error(`Failed to download: ${response.statusCode}`))
-          return
-        }
-        response.pipe(file)
+async function createS3Client() {
+  try {
+    const credentials = await defaultProvider()()
+    return new S3Client({ region: BUCKET_REGION, credentials: async () => credentials })
+  } catch {
+    // No credentials configured — use anonymous access for public bucket
+    return new S3Client({
+      region: BUCKET_REGION,
+      credentials: { accessKeyId: 'x', secretAccessKey: 'x' },
+      signer: { sign: async (request) => request },
+    })
+  }
+}
+
+function downloadFromS3(s3, key, dest) {
+  return s3.send(new GetObjectCommand({ Bucket: BUCKET_NAME, Key: key })).then(
+    (response) =>
+      new Promise((resolve, reject) => {
+        const file = fs.createWriteStream(dest)
+        response.Body.pipe(file)
         file.on('finish', () => {
           file.close()
           resolve()
         })
+        file.on('error', (err) => {
+          fs.unlink(dest, () => {})
+          reject(err)
+        })
+        response.Body.on('error', (err) => {
+          fs.unlink(dest, () => {})
+          reject(err)
+        })
       })
-      .on('error', (err) => {
-        fs.unlink(dest, () => {})
-        reject(err)
-      })
-  })
+  )
 }
 
-async function downloadPackage(packageName, message) {
+async function downloadPackage(s3, packageName, message) {
   const packageDir = path.join(FRAMEWORKS_DIR, packageName, 'ios')
   const zipPath = path.join(packageDir, `${packageName}.zip`)
-  const url = `${SDK_BASE_URL}/${SDK_VERSION}/ios/${packageName}.zip`
+  const key = `${SDK_KEY_PREFIX}/${packageName}.zip`
 
   fs.mkdirSync(packageDir, { recursive: true })
 
   message(`Downloading ${packageName}`)
-  await downloadFile(url, zipPath)
+  await downloadFromS3(s3, key, zipPath)
 
   message(`Extracting ${packageName}`)
   execSync(`unzip -o -q "${zipPath}" -d "${packageDir}"`, { stdio: 'pipe' })
@@ -106,6 +119,7 @@ async function main() {
     }
     fs.mkdirSync(FRAMEWORKS_DIR, { recursive: true })
 
+    const s3 = await createS3Client()
     const failures = []
 
     await tasks(
@@ -115,7 +129,7 @@ async function main() {
           title: `${packageName} ${progress}`,
           task: async (message) => {
             try {
-              await downloadPackage(packageName, (msg) => message(`${msg} ${progress}`))
+              await downloadPackage(s3, packageName, (msg) => message(`${msg} ${progress}`))
             } catch (err) {
               failures.push(packageName)
               return `Failed: ${packageName}`
