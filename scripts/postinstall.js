@@ -12,9 +12,11 @@ const { defaultProvider } = require('@aws-sdk/credential-provider-node')
 const { intro, outro, log, note, tasks } = require('@clack/prompts')
 
 const SDK_VERSION = 'release/3.2.0'
+// const SDK_VERSION = 'develop'
 const BUCKET_NAME = 'switchboard-sdk-public'
+// const BUCKET_NAME = 'switchboard-sdk'
 const BUCKET_REGION = 'us-east-1'
-const SDK_KEY_PREFIX = `builds/${SDK_VERSION}/ios`
+const PATH_PREFIX = `builds/${SDK_VERSION}/ios`
 
 const PACKAGES = [
   'SwitchboardSDK',
@@ -67,7 +69,7 @@ function downloadFromS3(s3, key, dest) {
 async function downloadPackage(s3, packageName, message) {
   const packageDir = path.join(FRAMEWORKS_DIR, packageName, 'ios')
   const zipPath = path.join(packageDir, `${packageName}.zip`)
-  const key = `${SDK_KEY_PREFIX}/${packageName}.zip`
+  const key = `${PATH_PREFIX}/${packageName}.zip`
 
   fs.mkdirSync(packageDir, { recursive: true })
 
@@ -132,7 +134,7 @@ async function main() {
               await downloadPackage(s3, packageName, (msg) => message(`${msg} ${progress}`))
             } catch (err) {
               failures.push(packageName)
-              return `Failed: ${packageName}`
+              return `Failed to download: ${packageName}`
             }
             return `Downloaded ${packageName} ${progress}`
           },
@@ -141,7 +143,6 @@ async function main() {
     )
 
     if (failures.length > 0) {
-      log.error(`Failed to download: ${failures.join(', ')}`)
       log.error(`Installation incomplete — ${failures.length} package(s) failed`)
       return 1
     }
