@@ -191,28 +191,6 @@ await EdgeSpeech.configure({
 | `stopSpeaking()`                | Stop current TTS playback                |
 | `requestMicrophonePermission()` | Request microphone access                |
 
-### Events
-
-Listen via `SwitchboardVoiceModule.addListener(eventName, handler)`.
-
-| Event           | Payload                              | Description                                     |
-| --------------- | ------------------------------------ | ----------------------------------------------- |
-| `onTranscript`  | `{ text: string, isFinal: boolean }` | Speech recognized                               |
-| `onStateChange` | `{ state: string }`                  | State changed (`idle`, `listening`, `speaking`) |
-| `onSpeechStart` | `{}`                                 | VAD detected voice activity                     |
-| `onSpeechEnd`   | `{}`                                 | VAD detected end of speech                      |
-| `onTTSComplete` | `{}`                                 | TTS finished playing                            |
-| `onInterrupted` | `{}`                                 | TTS interrupted by user speech                  |
-| `onError`       | `{ code: string, message: string }`  | Error occurred                                  |
-
-### States
-
-```
-idle -> listening -> processing -> idle
-                 \              /
-                   -> speaking -
-```
-
 ## Example App
 
 The `example/` directory contains a minimal demo showing the complete voice loop:
@@ -222,6 +200,10 @@ cd example
 npm install
 npx expo run:ios
 ```
+
+### Demo Token
+
+The example app ships with a built-in demo `APP_ID` and `APP_SECRET` so you can run it immediately without creating a Switchboard account. This token is provided for evaluation only and **may be rotated or revoked at any time** — do not use it in a production app. Replace it with your own credentials from [console.switchboard.audio](https://console.switchboard.audio/register) before shipping.
 
 ## Architecture
 
@@ -310,6 +292,14 @@ Your Switchboard `APP_ID` and `APP_SECRET` are **safe to bundle in your applicat
 These credentials identify your application to the Switchboard SDK runtime. They do not grant access to any backend system, user data, or billing controls beyond your own app's usage quota. There is no equivalent "secret key" that must be kept private.
 
 You can commit them to source control, include them in your app bundle, or pass them at build time via environment variables.
+
+## Pricing and Quotas
+
+See the full pricing details at [switchboard.audio/pricing](https://switchboard.audio/pricing/).
+
+**Free Prototyping License** — no cost for apps with fewer than 20,000 cumulative SDK activations. Suitable for development, testing, and early App Store releases.
+
+**Commercial License** — required once your app exceeds 20,000 cumulative activations. Contact [licensing@synervoz.com](mailto:licensing@synervoz.com) before your app reaches that threshold.
 
 ## Releasing
 
