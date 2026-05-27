@@ -223,6 +223,10 @@ npm install
 npx expo run:ios
 ```
 
+### Demo Token
+
+The example app ships with a built-in demo `APP_ID` and `APP_SECRET` so you can run it immediately without creating a Switchboard account. This token is provided for evaluation only and **may be rotated or revoked at any time** — do not use it in a production app. Replace it with your own credentials from [console.switchboard.audio](https://console.switchboard.audio/register) before shipping.
+
 ## Architecture
 
 ```mermaid
