@@ -191,28 +191,6 @@ await EdgeSpeech.configure({
 | `stopSpeaking()`                | Stop current TTS playback                |
 | `requestMicrophonePermission()` | Request microphone access                |
 
-### Events
-
-Listen via `SwitchboardVoiceModule.addListener(eventName, handler)`.
-
-| Event           | Payload                              | Description                                     |
-| --------------- | ------------------------------------ | ----------------------------------------------- |
-| `onTranscript`  | `{ text: string, isFinal: boolean }` | Speech recognized                               |
-| `onStateChange` | `{ state: string }`                  | State changed (`idle`, `listening`, `speaking`) |
-| `onSpeechStart` | `{}`                                 | VAD detected voice activity                     |
-| `onSpeechEnd`   | `{}`                                 | VAD detected end of speech                      |
-| `onTTSComplete` | `{}`                                 | TTS finished playing                            |
-| `onInterrupted` | `{}`                                 | TTS interrupted by user speech                  |
-| `onError`       | `{ code: string, message: string }`  | Error occurred                                  |
-
-### States
-
-```
-idle -> listening -> processing -> idle
-                 \              /
-                   -> speaking -
-```
-
 ## Example App
 
 The `example/` directory contains a minimal demo showing the complete voice loop:
