@@ -79,11 +79,6 @@
     "react-test-renderer": "19.1.0",
     "typescript": "^5.0.4"
   },
-  "codegenConfig": {
-    "name": "SwitchboardVoiceSpecs",
-    "type": "modules",
-    "jsSrcsDir": "specs"
-  },
   "engines": {
     "node": ">=22"
   },
