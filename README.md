@@ -3,6 +3,11 @@
 A React Native hook that provides on-device AI speech processing through the [Switchboard SDK](https://switchboard.audio/).
 This can be up to 99% cheaper than cloud speech-to-speech.
 
+| Platform | Status      |
+| -------- | ----------- |
+| iOS      | Supported   |
+| Android  | Coming soon |
+
 ## Example Usage
 
 ```typescript
@@ -31,7 +36,7 @@ export default function App() {
 > [!TIP]
 > The included [example app](./example/) shows a complete speech-to-speech workflow.
 
-## Requirements
+## Installation
 
 | Requirement       | Minimum |
 | ----------------- | ------- |
@@ -39,15 +44,6 @@ export default function App() {
 | iOS               | 13.4+   |
 | Node.js           | 22+     |
 | expo-modules-core | 2.0.0+  |
-
-## Platform Support
-
-| Platform | Status      |
-| -------- | ----------- |
-| iOS      | Supported   |
-| Android  | Coming soon |
-
-## Installation
 
 ```bash
 npm install @synervoz/edgespeech
