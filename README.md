@@ -79,8 +79,8 @@ Wrap your app in the `EdgeSpeechProvider` and configure it.
 <!-- prettier-ignore -->
 ```tsx
 <EdgeSpeechProvider
-  appId="YOUR_APP_ID"         // Required: Switchboard app ID
-  appSecret="YOUR_APP_SECRET" // Required: Switchboard app secret
+  appId="YOUR_APP_ID"         // Optional: Switchboard app ID
+  appSecret="YOUR_APP_SECRET" // Optional: Switchboard app secret
   sttModel="whisper-base-en"  // Optional: STT model (default: 'whisper-base-en')
   ttsVoice="en_GB"            // Optional: TTS voice (default: 'en_GB')
   vadSensitivity={0.5}        // Optional: VAD sensitivity 0.0–1.0 (default: 0.5)
@@ -88,6 +88,10 @@ Wrap your app in the `EdgeSpeechProvider` and configure it.
   <App />
 </EdgeSpeechProvider>
 ```
+
+> [!TIP]
+> This library ships with a built-in demo credentials so you can run it immediately without creating a Switchboard account.
+> Simply omit the `APP_ID` and `APP_SECRET` from the EdgeSpeechProvider.
 
 > [!NOTE]
 > Your Switchboard `APP_ID` and `APP_SECRET` are **safe to bundle in your application**. They function like a publishing key and are intended to be distributed with your app.
@@ -117,10 +121,6 @@ const {
   onInterrupted,        // (cb: () => void) => void — fires when VAD interrupts TTS
 } = useEdgeSpeech()
 ```
-
-### Demo Token
-
-The example app ships with a built-in demo `APP_ID` and `APP_SECRET` so you can run it immediately without creating a Switchboard account. This token is provided for evaluation only and **may be rotated or revoked at any time** — do not use it in a production app. Replace it with your own credentials from [console.switchboard.audio](https://console.switchboard.audio/register) before shipping.
 
 ## Contributing
 
