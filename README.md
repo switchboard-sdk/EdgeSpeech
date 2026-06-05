@@ -28,7 +28,8 @@ export default function App() {
 }
 ```
 
-The included [example app](./example/) shows a complete speech-to-speech workflow.
+> [!TIP]
+> The included [example app](./example/) shows a complete speech-to-speech workflow.
 
 ## Requirements
 
@@ -52,18 +53,16 @@ The included [example app](./example/) shows a complete speech-to-speech workflo
 npm install @synervoz/edgespeech
 ```
 
-### iOS Setup — Expo (managed or bare)
+### iOS Setup with Expo
 
-1. The Switchboard SDK frameworks are downloaded automatically when you run `npm install`. No separate setup command is needed.
-
-2. Add microphone permission to your `Info.plist` (or via `app.json` `infoPlist` for Expo managed workflow):
+Add microphone permission to your `Info.plist` (or via `app.json` `infoPlist` for Expo managed workflow):
 
 ```xml
 <key>NSMicrophoneUsageDescription</key>
 <string>This app needs microphone access for voice input</string>
 ```
 
-3. Build your app:
+Build your app:
 
 ```bash
 npx expo run:ios
@@ -89,6 +88,9 @@ Wrap your app in the `EdgeSpeechProvider` and configure it.
   <App />
 </EdgeSpeechProvider>
 ```
+
+> [!NOTE]
+> Your Switchboard `APP_ID` and `APP_SECRET` are **safe to bundle in your application**. They function like a publishing key and are intended to be distributed with your app.
 
 ### `useEdgeSpeech` hook
 
@@ -119,20 +121,6 @@ const {
 ### Demo Token
 
 The example app ships with a built-in demo `APP_ID` and `APP_SECRET` so you can run it immediately without creating a Switchboard account. This token is provided for evaluation only and **may be rotated or revoked at any time** — do not use it in a production app. Replace it with your own credentials from [console.switchboard.audio](https://console.switchboard.audio/register) before shipping.
-
-## Get Switchboard Credentials
-
-1. Sign up at [switchboard.audio](https://console.switchboard.audio/register)
-2. Create a new app in the dashboard
-3. Copy your App ID and App Secret
-
-## Credential Security
-
-Your Switchboard `APP_ID` and `APP_SECRET` are **safe to bundle in your application**. They function like a publishing key and are intended to be distributed with your app.
-
-These credentials identify your application to the Switchboard SDK runtime. They do not grant access to any backend system, user data, or billing controls beyond your own app's usage quota. There is no equivalent "secret key" that must be kept private.
-
-You can commit them to source control, include them in your app bundle, or pass them at build time via environment variables.
 
 ## Contributing
 
