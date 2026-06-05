@@ -71,16 +71,22 @@ npx expo run:ios
 
 ## API Reference
 
-### Configuration
+The `useEdgeSpeech` hook provides access to the main functions of the Switchboard SDK.
 
-```typescript
-await EdgeSpeech.configure({
-  appId: string,           // Required: Switchboard app ID
-  appSecret: string,       // Required: Switchboard app secret
-  sttModel?: string,       // Optional: STT model (default: 'whisper-base-en')
-  ttsVoice?: string,       // Optional: TTS voice (default: 'en_GB')
-  vadSensitivity?: number, // Optional: VAD sensitivity 0.0-1.0 (default: 0.5)
-});
+### Provider
+
+Wrap your app in the `EdgeSpeechProvider` and configure it.
+
+```tsx
+<EdgeSpeechProvider
+  appId="YOUR_APP_ID" // Required: Switchboard app ID
+  appSecret="YOUR_APP_SECRET" // Required: Switchboard app secret
+  sttModel="whisper-base-en" // Optional: STT model (default: 'whisper-base-en')
+  ttsVoice="en_GB" // Optional: TTS voice (default: 'en_GB')
+  vadSensitivity={0.5} // Optional: VAD sensitivity 0.0–1.0 (default: 0.5)
+>
+  <App />
+</EdgeSpeechProvider>
 ```
 
 ### Functions
@@ -120,9 +126,9 @@ See the full pricing details at [switchboard.audio/pricing](https://switchboard.
 
 **Commercial License** — required once your app exceeds 20,000 cumulative activations. Contact [licensing@synervoz.com](mailto:licensing@synervoz.com) before your app reaches that threshold.
 
-## Development
+## Contributing
 
-## Tests
+### Tests
 
 Run unit tests with:
 
