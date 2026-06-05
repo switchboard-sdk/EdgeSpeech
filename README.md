@@ -27,32 +27,6 @@ export default function App() {
 
 The [example app](./example/) shows the complete voice loop running end-to-end.
 
-## Cost Savings: 99% Cheaper Than Cloud Speech-to-Speech
-
-The real advantage of on-device voice processing is **cost**.
-
-### The Math
-
-Consider a voice AI assistant handling 1,000 conversations per day, each lasting 5 minutes.
-
-**OpenAI Realtime API (cloud speech-to-speech):**
-| Component | Calculation | Cost |
-|-----------|-------------|------|
-| Audio input | 150 sec × 80 tokens/sec × $100/1M | $1.20 |
-| Audio output | 150 sec × 80 tokens/sec × $200/1M | $2.40 |
-| **Per conversation** | | **$3.60** |
-| **1,000 conversations/day** | | **$3,600/day** |
-| **Monthly (30 days)** | | **$108,000** |
-
-**EdgeSpeech + ChatGPT API (text only):**
-| Component | Calculation | Cost |
-|-----------|-------------|------|
-| Text input | ~750 tokens × $5/1M | $0.004 |
-| Text output | ~750 tokens × $20/1M | $0.015 |
-| **Per conversation** | | **$0.02** |
-| **1,000 conversations/day** | | **$20/day** |
-| **Monthly (30 days)** | | **$600** |
-
 ## Installation
 
 ```bash
@@ -354,3 +328,29 @@ The full Switchboard SDK license text is downloaded to `ios/Frameworks/Switchboa
 - [Switchboard SDK Documentation](https://docs.switchboard.audio/)
 - [Example App](./example/)
 - [GitHub Issues](https://github.com/switchboard-sdk/EdgeSpeech/issues)
+
+## Cost Savings: 99% Cheaper Than Cloud Speech-to-Speech
+
+The real advantage of on-device voice processing is **cost**.
+
+### The Math
+
+Consider a voice AI assistant handling 1,000 conversations per day, each lasting 5 minutes.
+
+**OpenAI Realtime API (cloud speech-to-speech):**
+| Component | Calculation | Cost |
+|-----------|-------------|------|
+| Audio input | 150 sec × 80 tokens/sec × $100/1M | $1.20 |
+| Audio output | 150 sec × 80 tokens/sec × $200/1M | $2.40 |
+| **Per conversation** | | **$3.60** |
+| **1,000 conversations/day** | | **$3,600/day** |
+| **Monthly (30 days)** | | **$108,000** |
+
+**EdgeSpeech + ChatGPT API (text only):**
+| Component | Calculation | Cost |
+|-----------|-------------|------|
+| Text input | ~750 tokens × $5/1M | $0.004 |
+| Text output | ~750 tokens × $20/1M | $0.015 |
+| **Per conversation** | | **$0.02** |
+| **1,000 conversations/day** | | **$20/day** |
+| **Monthly (30 days)** | | **$600** |
