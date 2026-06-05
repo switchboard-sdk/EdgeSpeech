@@ -3,18 +3,26 @@
 Web developers can add listening, speaking, or both to a React Native app with EdgeSpeech, without writing any native audio code. Voice Activity Detection, Speech-to-Text, and Text-to-Speech all run on-device through the [Switchboard SDK](https://switchboard.audio/). Your JavaScript works entirely with text.
 
 ```typescript
-import { SwitchboardVoiceModule, initialize, listen, speak } from '@synervoz/edgespeech'
+import { EdgeSpeechProvider, useEdgeSpeech } from '@synervoz/edgespeech'
 
-initialize('YOUR_APP_ID', 'YOUR_APP_SECRET')
+function VoiceChat() {
+  const { listen, speak, onTranscriptComplete } = useEdgeSpeech()
 
-SwitchboardVoiceModule.addListener('onTranscript', async ({ text, isFinal }) => {
-  if (isFinal) {
+  onTranscriptComplete(async (text) => {
     const response = await chat(text)
     await speak(response)
-  }
-})
+  })
 
-await listen()
+  return <Button onPress={listen} title="Start Listening" />
+}
+
+export default function App() {
+  return (
+    <EdgeSpeechProvider appId="YOUR_APP_ID" appSecret="YOUR_APP_SECRET">
+      <VoiceChat />
+    </EdgeSpeechProvider>
+  )
+}
 ```
 
 The [example app](./example/) shows the complete voice loop running end-to-end.
