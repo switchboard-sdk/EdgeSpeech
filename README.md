@@ -1,6 +1,7 @@
 # EdgeSpeech
 
-Web developers can add listening, speaking, or both to a React Native app with EdgeSpeech, without writing any native audio code. Voice Activity Detection, Speech-to-Text, and Text-to-Speech all run on-device through the [Switchboard SDK](https://switchboard.audio/). Your JavaScript works entirely with text.
+A React Native hook that provides on-device AI speech processing through the [Switchboard SDK](https://switchboard.audio/).
+This can be up to 99% cheaper than cloud speech-to-speech.
 
 ```typescript
 import { EdgeSpeechProvider, useEdgeSpeech } from '@synervoz/edgespeech'
@@ -158,29 +159,3 @@ The [release workflow](.github/workflows/release.yml) builds the package and pub
 The full Switchboard SDK license text is downloaded to `ios/Frameworks/SwitchboardSDK/ios/LICENSE.txt` when you run `npm install` and is also available at [switchboard.audio/licensing](https://switchboard.audio/licensing/).
 
 **AI model weights** (Whisper STT, Silero VAD, Sherpa TTS) are bundled inside the Switchboard SDK frameworks under their own open-source licenses: Whisper.cpp (MIT), Silero VAD (MIT), and Sherpa-ONNX (Apache 2.0). Their full license texts are included in the downloaded framework packages.
-
-## Cost Savings: 99% Cheaper Than Cloud Speech-to-Speech
-
-The real advantage of on-device voice processing is **cost**.
-
-### The Math
-
-Consider a voice AI assistant handling 1,000 conversations per day, each lasting 5 minutes.
-
-**OpenAI Realtime API (cloud speech-to-speech):**
-| Component | Calculation | Cost |
-|-----------|-------------|------|
-| Audio input | 150 sec × 80 tokens/sec × $100/1M | $1.20 |
-| Audio output | 150 sec × 80 tokens/sec × $200/1M | $2.40 |
-| **Per conversation** | | **$3.60** |
-| **1,000 conversations/day** | | **$3,600/day** |
-| **Monthly (30 days)** | | **$108,000** |
-
-**EdgeSpeech + ChatGPT API (text only):**
-| Component | Calculation | Cost |
-|-----------|-------------|------|
-| Text input | ~750 tokens × $5/1M | $0.004 |
-| Text output | ~750 tokens × $20/1M | $0.015 |
-| **Per conversation** | | **$0.02** |
-| **1,000 conversations/day** | | **$20/day** |
-| **Monthly (30 days)** | | **$600** |
