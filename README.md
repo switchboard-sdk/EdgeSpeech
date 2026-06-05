@@ -134,14 +134,6 @@ These credentials identify your application to the Switchboard SDK runtime. They
 
 You can commit them to source control, include them in your app bundle, or pass them at build time via environment variables.
 
-## Pricing and Quotas
-
-See the full pricing details at [switchboard.audio/pricing](https://switchboard.audio/pricing/).
-
-**Free Prototyping License** — no cost for apps with fewer than 20,000 cumulative SDK activations. Suitable for development, testing, and early App Store releases.
-
-**Commercial License** — required once your app exceeds 20,000 cumulative activations. Contact [licensing@synervoz.com](mailto:licensing@synervoz.com) before your app reaches that threshold.
-
 ## Contributing
 
 ### Tests
