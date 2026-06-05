@@ -11,7 +11,7 @@ const { S3Client, GetObjectCommand } = require('@aws-sdk/client-s3')
 const { defaultProvider } = require('@aws-sdk/credential-provider-node')
 const { intro, outro, log, note, tasks } = require('@clack/prompts')
 
-const SDK_VERSION = 'release/3.2.0'
+const SDK_VERSION = 'release/3.2.3'
 // const SDK_VERSION = 'develop'
 const BUCKET_NAME = 'switchboard-sdk-public'
 // const BUCKET_NAME = 'switchboard-sdk'
