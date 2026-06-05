@@ -144,20 +144,3 @@ git push origin main --tags
 ```
 
 The [release workflow](.github/workflows/release.yml) builds the package and publishes to npm under the `@synervoz` scope using `npm publish --access public`. Requires an `NPM_TOKEN` secret configured in the repository settings.
-
-## License
-
-**EdgeSpeech** - the JavaScript, TypeScript, and Swift source files in this repository are released under the [MIT License](./LICENSE).
-
-**Switchboard SDK frameworks** are downloaded at install time and are proprietary software subject to the [Switchboard SDK Master License Agreement](https://switchboard.audio/licensing/). Key terms for production use:
-
-- **Free Prototyping License** - no cost for apps with fewer than 20,000 cumulative SDK activations. Allows public release including on the iOS App Store.
-- **Commercial License** - required once your app exceeds 20,000 cumulative activations. Contact [licensing@synervoz.com](mailto:licensing@synervoz.com) before your app reaches that threshold.
-- Apps using the Prototyping License must include the following attribution in app credits:
-  > [App Name] uses the Switchboard SDK by Synervoz (Synervoz.com)
-- The SDK may not be sublicensed or incorporated into another platform, SDK, or API without written permission from Synervoz.
-- Synervoz may disable access without notice if license terms are exceeded.
-
-The full Switchboard SDK license text is downloaded to `ios/Frameworks/SwitchboardSDK/ios/LICENSE.txt` when you run `npm install` and is also available at [switchboard.audio/licensing](https://switchboard.audio/licensing/).
-
-**AI model weights** (Whisper STT, Silero VAD, Sherpa TTS) are bundled inside the Switchboard SDK frameworks under their own open-source licenses: Whisper.cpp (MIT), Silero VAD (MIT), and Sherpa-ONNX (Apache 2.0). Their full license texts are included in the downloaded framework packages.
