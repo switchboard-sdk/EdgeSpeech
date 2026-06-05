@@ -66,52 +66,6 @@ npm install @synervoz/edgespeech
 npx expo run:ios
 ```
 
-## Quick Start
-
-```typescript
-import {
-  SwitchboardVoiceModule,
-  initialize,
-  configure,
-  listen,
-  speak,
-  requestMicrophonePermission,
-} from '@synervoz/edgespeech'
-
-// 1. Initialize with your Switchboard credentials
-initialize('YOUR_SWITCHBOARD_APP_ID', 'YOUR_SWITCHBOARD_APP_SECRET')
-
-// 2. (Optional) tune settings
-configure({ vadSensitivity: 0.5 })
-
-// 3. Set up event listeners
-SwitchboardVoiceModule.addListener('onTranscript', ({ text, isFinal }) => {
-  console.log(isFinal ? 'Final:' : 'Interim:', text)
-  if (isFinal) handleUserSpeech(text)
-})
-
-SwitchboardVoiceModule.addListener('onStateChange', ({ state }) => {
-  console.log('State:', state) // 'idle' | 'listening' | 'speaking'
-})
-
-SwitchboardVoiceModule.addListener('onInterrupted', () => {
-  console.log('User interrupted playback')
-})
-
-SwitchboardVoiceModule.addListener('onError', ({ code, message }) => {
-  console.error('Voice error:', code, message)
-})
-
-// 4. Request permission and start
-const granted = await requestMicrophonePermission()
-if (granted) {
-  await listen()
-}
-
-// 5. Speak responses
-await speak('Hello! How can I help you today?')
-```
-
 ## API Reference
 
 ### Configuration
