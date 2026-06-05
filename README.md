@@ -66,58 +66,6 @@ npm install @synervoz/edgespeech
 npx expo run:ios
 ```
 
-### iOS Setup — Bare React Native (without Expo)
-
-EdgeSpeech uses [`expo-modules-core`](https://docs.expo.dev/bare/installing-expo-modules/) as its native module bridge. You need this package even in a project that otherwise does not use Expo.
-
-1. Install `expo-modules-core`:
-
-```bash
-npm install expo-modules-core
-```
-
-2. Run `npm install @synervoz/edgespeech`. The Switchboard SDK frameworks download automatically — no separate setup script is needed.
-
-3. Add the Expo autolinking require to the top of `ios/Podfile`, before any `target` blocks:
-
-```ruby
-require File.join(
-  File.dirname(`node --print "require.resolve('expo-modules-core/package.json')"`),
-  "scripts/autolinking"
-)
-```
-
-4. Inside your main app target, call `use_expo_modules!`:
-
-```ruby
-target 'YourApp' do
-  use_expo_modules!
-  # ... your other pods
-end
-```
-
-`use_expo_modules!` discovers all installed packages that include an `expo-module.config.json` (including EdgeSpeech) and links them automatically.
-
-5. Install pods:
-
-```bash
-cd ios && pod install
-```
-
-6. Add microphone permission to `ios/YourApp/Info.plist`:
-
-```xml
-<key>NSMicrophoneUsageDescription</key>
-<string>This app needs microphone access for voice input</string>
-```
-
-7. Build your app:
-
-```bash
-npx react-native run-ios
-# or open ios/YourApp.xcworkspace in Xcode
-```
-
 ## Quick Start
 
 ```typescript
