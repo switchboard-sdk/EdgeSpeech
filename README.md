@@ -38,16 +38,18 @@ export default function App() {
 
 ## Installation
 
+```bash
+npm install @synervoz/edgespeech
+```
+
+### Requirements
+
 | Requirement       | Minimum |
 | ----------------- | ------- |
 | React Native      | 0.74+   |
 | iOS               | 13.4+   |
 | Node.js           | 22+     |
 | expo-modules-core | 2.0.0+  |
-
-```bash
-npm install @synervoz/edgespeech
-```
 
 ### iOS Setup with Expo
 
