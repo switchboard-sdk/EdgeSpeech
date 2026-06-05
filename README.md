@@ -27,6 +27,22 @@ export default function App() {
 
 The [example app](./example/) shows the complete voice loop running end-to-end.
 
+## Requirements
+
+| Requirement       | Minimum |
+| ----------------- | ------- |
+| React Native      | 0.74+   |
+| iOS               | 13.4+   |
+| Node.js           | 22+     |
+| expo-modules-core | 2.0.0+  |
+
+## Platform Support
+
+| Platform | Status      |
+| -------- | ----------- |
+| iOS      | Supported   |
+| Android  | Coming soon |
+
 ## Installation
 
 ```bash
@@ -186,22 +202,6 @@ npx expo run:ios
 ### Demo Token
 
 The example app ships with a built-in demo `APP_ID` and `APP_SECRET` so you can run it immediately without creating a Switchboard account. This token is provided for evaluation only and **may be rotated or revoked at any time** — do not use it in a production app. Replace it with your own credentials from [console.switchboard.audio](https://console.switchboard.audio/register) before shipping.
-
-## Platform Support
-
-| Platform | Status      |
-| -------- | ----------- |
-| iOS      | Supported   |
-| Android  | Coming soon |
-
-## Requirements
-
-| Requirement       | Minimum | Notes                                                                                                          |
-| ----------------- | ------- | -------------------------------------------------------------------------------------------------------------- |
-| React Native      | 0.74+   | Declared in `peerDependencies`; not enforced at install time                                                   |
-| iOS               | 13.4+   | Enforced by the podspec (`s.platforms = { :ios => "13.4" }`)                                                   |
-| Node.js           | 20+     | Required for all tooling; `engines` field in `package.json` specifies `>=22`                                   |
-| expo-modules-core | 2.0.0+  | Required peer dependency; included automatically with Expo, must be installed explicitly for bare React Native |
 
 ## Get Switchboard Credentials
 
