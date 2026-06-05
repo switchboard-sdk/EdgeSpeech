@@ -117,7 +117,17 @@ See the full pricing details at [switchboard.audio/pricing](https://switchboard.
 
 **Commercial License** — required once your app exceeds 20,000 cumulative activations. Contact [licensing@synervoz.com](mailto:licensing@synervoz.com) before your app reaches that threshold.
 
-## Releasing
+## Development
+
+## Tests
+
+Run unit tests with:
+
+```bash
+npm test
+```
+
+### Release
 
 Releases are published to npm automatically when a version tag is pushed. Versions follow [Semantic Versioning](https://semver.org/): `MAJOR.MINOR.PATCH` — increment `MAJOR` for breaking changes, `MINOR` for new features, `PATCH` for bug fixes.
 
@@ -131,14 +141,6 @@ git push origin main --tags
 ```
 
 The [release workflow](.github/workflows/release.yml) builds the package and publishes to npm under the `@synervoz` scope using `npm publish --access public`. Requires an `NPM_TOKEN` secret configured in the repository settings.
-
-## Tests
-
-Run unit tests with:
-
-```bash
-npm test
-```
 
 ## License
 
