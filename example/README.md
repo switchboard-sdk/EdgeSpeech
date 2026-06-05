@@ -11,14 +11,21 @@ The app has two sections: **Voice Input** for transcription (tap "Start Listenin
 
 ## Setup
 
-1. Install dependencies (this also downloads the Switchboard SDK frameworks):
+1. Install and build the root library first:
+
+```bash
+npm install
+npm run build
+```
+
+2. Install example app dependencies (this also downloads the Switchboard SDK frameworks):
 
 ```bash
 cd example
 npm install
 ```
 
-2. Copy the environment file and add your credentials:
+3. Copy the environment file and add your credentials:
 
 ```bash
 cp .env.example .env
@@ -26,7 +33,7 @@ cp .env.example .env
 
 Edit `.env` with your Switchboard App ID and App Secret.
 
-3. Set up iOS code signing for your device:
+4. Set up iOS code signing for your device:
 
 Follow [these instructions first](https://docs.expo.dev/get-started/set-up-your-environment/?platform=ios&device=physical&mode=development-build&buildEnv=local).
 
@@ -43,7 +50,7 @@ e. Close Xcode.
 
 > This step is only needed once. After Xcode creates the profile, all future CLI builds will work without opening Xcode again.
 
-4. Build and run on a physical iOS device:
+5. Build and run on a physical iOS device:
 
 ```bash
 npx expo run:ios --device
