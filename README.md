@@ -323,12 +323,6 @@ The full Switchboard SDK license text is downloaded to `ios/Frameworks/Switchboa
 
 **AI model weights** (Whisper STT, Silero VAD, Sherpa TTS) are bundled inside the Switchboard SDK frameworks under their own open-source licenses: Whisper.cpp (MIT), Silero VAD (MIT), and Sherpa-ONNX (Apache 2.0). Their full license texts are included in the downloaded framework packages.
 
-## Links
-
-- [Switchboard SDK Documentation](https://docs.switchboard.audio/)
-- [Example App](./example/)
-- [GitHub Issues](https://github.com/switchboard-sdk/EdgeSpeech/issues)
-
 ## Cost Savings: 99% Cheaper Than Cloud Speech-to-Speech
 
 The real advantage of on-device voice processing is **cost**.
