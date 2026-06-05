@@ -3,6 +3,8 @@
 A React Native hook that provides on-device AI speech processing through the [Switchboard SDK](https://switchboard.audio/).
 This can be up to 99% cheaper than cloud speech-to-speech.
 
+## Example Usage
+
 ```typescript
 import { EdgeSpeechProvider, useEdgeSpeech } from '@synervoz/edgespeech'
 
@@ -26,7 +28,7 @@ export default function App() {
 }
 ```
 
-The [example app](./example/) shows the complete voice loop running end-to-end.
+The included [example app](./example/) shows a complete speech-to-speech workflow.
 
 ## Requirements
 
