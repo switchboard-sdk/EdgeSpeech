@@ -162,9 +162,9 @@ await EdgeSpeech.configure({
 });
 ```
 
-### Methods
+### Functions
 
-| Method                          | Description                              |
+| Function                        | Description                              |
 | ------------------------------- | ---------------------------------------- |
 | `configure(config)`             | Initialize with credentials and settings |
 | `listen()`                      | Start listening for voice input          |
