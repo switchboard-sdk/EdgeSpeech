@@ -187,64 +187,6 @@ npx expo run:ios
 
 The example app ships with a built-in demo `APP_ID` and `APP_SECRET` so you can run it immediately without creating a Switchboard account. This token is provided for evaluation only and **may be rotated or revoked at any time** — do not use it in a production app. Replace it with your own credentials from [console.switchboard.audio](https://console.switchboard.audio/register) before shipping.
 
-## Architecture
-
-```mermaid
-flowchart TB
-    mic["🎤 Microphone"]
-    spk["🔊 Speaker"]
-
-    subgraph Engines["EdgeSpeech"]
-        subgraph JS["JavaScript API"]
-            subgraph Controls["Controls"]
-                listen["listen()"]
-                stopListening["stopListening()"]
-                stopSpeaking["stopSpeaking()"]
-            end
-            speak["speak(text)"]
-            onTranscript["onTranscript"]
-            onInterrupted["onInterrupted"]
-        end
-        subgraph ListenGraph["Listening Graph"]
-            direction LR
-            MCtoMono["MultiChannelToMono"] --> Split["BusSplitter"]
-            Split --> VAD["SileroVAD"]
-            Split --> STT["Whisper STT"]
-            VAD -.-> STT
-        end
-
-        subgraph SpeakingGraph["Speaking Graph"]
-            TTS["Sherpa TTS"]
-        end
-    end
-
-    SDK["Switchboard SDK (Runtime)"]
-
-    mic --> ListenGraph
-    SpeakingGraph --> spk
-    ListenGraph -- "executed by" --> SDK
-    SpeakingGraph -- "executed by" --> SDK
-
-    listen --> ListenGraph
-    stopListening --> ListenGraph
-    speak --> SpeakingGraph
-    stopSpeaking --> SpeakingGraph
-
-    STT -.-> onTranscript
-    ListenGraph -.-> onInterrupted
-    onInterrupted --> stopSpeaking
-
-    onTranscript --> LLM
-    LLM --> speak
-
-    LLM["🤖 Your LLM Pipeline"]:::external
-
-    classDef external fill:#f5f5f5,stroke:#999,stroke-dasharray: 5 5
-
-    style ListenGraph fill:#fff,stroke:#999,stroke-dasharray: 5 5
-    style SpeakingGraph fill:#fff,stroke:#999,stroke-dasharray: 5 5
-```
-
 ## Platform Support
 
 | Platform | Status      |
