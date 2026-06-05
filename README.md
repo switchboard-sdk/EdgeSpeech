@@ -73,32 +73,48 @@ npx expo run:ios
 
 The `useEdgeSpeech` hook provides access to the main functions of the Switchboard SDK.
 
-### Provider
+### EdgeSpeechProvider provider
 
 Wrap your app in the `EdgeSpeechProvider` and configure it.
 
+<!-- prettier-ignore -->
 ```tsx
 <EdgeSpeechProvider
-  appId="YOUR_APP_ID" // Required: Switchboard app ID
+  appId="YOUR_APP_ID"         // Required: Switchboard app ID
   appSecret="YOUR_APP_SECRET" // Required: Switchboard app secret
-  sttModel="whisper-base-en" // Optional: STT model (default: 'whisper-base-en')
-  ttsVoice="en_GB" // Optional: TTS voice (default: 'en_GB')
-  vadSensitivity={0.5} // Optional: VAD sensitivity 0.0–1.0 (default: 0.5)
+  sttModel="whisper-base-en"  // Optional: STT model (default: 'whisper-base-en')
+  ttsVoice="en_GB"            // Optional: TTS voice (default: 'en_GB')
+  vadSensitivity={0.5}        // Optional: VAD sensitivity 0.0–1.0 (default: 0.5)
 >
   <App />
 </EdgeSpeechProvider>
 ```
 
-### Functions
+### `useEdgeSpeech` hook
 
-| Function                        | Description                              |
-| ------------------------------- | ---------------------------------------- |
-| `configure(config)`             | Initialize with credentials and settings |
-| `listen()`                      | Start listening for voice input          |
-| `stopListening()`               | Stop listening                           |
-| `speak(text)`                   | Speak text using TTS                     |
-| `stopSpeaking()`                | Stop current TTS playback                |
-| `requestMicrophonePermission()` | Request microphone access                |
+Access the state and actions from any component with the `useEdgeSpeech` hook.
+
+<!-- prettier-ignore -->
+```typescript
+const {
+  // State
+  transcript,              // string       — live interim transcript (clears on final)
+  voiceState,              // 'idle' | 'listening' | 'processing' | 'speaking'
+  error,                   // string | null
+  hasMicrophonePermission, // boolean | null
+
+  // Actions
+  listen,                      // () => Promise<void>
+  stopListening,               // () => Promise<void>
+  speak,                       // (text: string) => Promise<void>
+  stopSpeaking,                // () => Promise<void>
+  requestMicrophonePermission, // () => Promise<boolean>
+
+  // Callbacks
+  onTranscriptComplete, // (cb: (text: string) => void) => void — fires on final transcript
+  onInterrupted,        // (cb: () => void) => void — fires when VAD interrupts TTS
+} = useEdgeSpeech()
+```
 
 ### Demo Token
 
