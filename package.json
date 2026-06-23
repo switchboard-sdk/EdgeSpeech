@@ -85,5 +85,10 @@
   },
   "dependencies": {
     "@clack/prompts": "^1.4.0"
+  },
+  "overrides": {
+    "eslint-plugin-ft-flow": {
+      "eslint": "$eslint"
+    }
   }
 }
