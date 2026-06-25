@@ -12,13 +12,16 @@ npm test
 
 Releases are published to npm automatically when a version tag is pushed. Versions follow [Semantic Versioning](https://semver.org/): `MAJOR.MINOR.PATCH` — increment `MAJOR` for breaking changes, `MINOR` for new features, `PATCH` for bug fixes.
 
-1. Bump the version in `package.json`.
-2. Commit: `git commit -am "chore: release vX.Y.Z"`
-3. Tag and push:
+1. Bump the version with npm:
 
 ```bash
-git tag vX.Y.Z
-git push origin main --tags
+npm version patch   # or minor / major
 ```
 
-The [release workflow](.github/workflows/release.yml) builds the package and publishes to npm under the `@synervoz` scope using `npm publish --access public`. Requires an `NPM_TOKEN` secret configured in the repository settings.
+2. Push the commit and tag:
+
+```bash
+git push && git push --tags
+```
+
+The [release workflow](.github/workflows/publish.yml) builds the package and publishes to npm under the `@synervoz` scope.
