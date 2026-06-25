@@ -42,7 +42,7 @@
     "switchboard",
     "on-device"
   ],
-  "author": "Thom Leigh",
+  "author": "Synervoz <contact@synervoz.com>",
   "license": "MIT",
   "publishConfig": {
     "access": "public",
