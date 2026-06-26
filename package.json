@@ -60,7 +60,6 @@
     "react-native": ">=0.74.0"
   },
   "devDependencies": {
-    "@aws-sdk/client-s3": "^3.1062.0",
     "@react-native/babel-preset": "^0.76.0",
     "@react-native/eslint-config": "^0.85.2",
     "@react-native/metro-config": "^0.76.0",
@@ -84,6 +83,7 @@
     "node": ">=22"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1062.0",
     "@clack/prompts": "^1.4.0"
   },
   "overrides": {
