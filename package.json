@@ -1,6 +1,6 @@
 {
   "name": "@synervoz/edgespeech",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "React Native library for on-device voice processing with Switchboard SDK",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
