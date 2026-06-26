@@ -17,9 +17,6 @@ tmp/
 ios/*/
 !ios/*.swift
 
-# Credentials
-example/credentials.ts
-
 # Dev session logs
 PROGRESS.md
 

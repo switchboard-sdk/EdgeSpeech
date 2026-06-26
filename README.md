@@ -88,8 +88,7 @@ Wrap your app in the `EdgeSpeechProvider` and configure it.
 ```
 
 > [!TIP]
-> This library ships with a built-in demo credentials so you can run it immediately without creating a Switchboard account.
-> Simply omit the `APP_ID` and `APP_SECRET` from the EdgeSpeechProvider.
+> This library ships with built-in demo credentials so you can run it immediately without creating a Switchboard account.
 
 > [!NOTE]
 > Your Switchboard `APP_ID` and `APP_SECRET` are **safe to bundle in your application**. They function like a publishing key and are intended to be distributed with your app.
