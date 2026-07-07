@@ -1,6 +1,6 @@
 # EdgeSpeech
 
-A React Native hook that provides on-device AI speech processing through the [Switchboard SDK](https://switchboard.audio/).
+A React Native hook that provides on-device AI speech processing, completely locally.
 This can be up to 99% cheaper than cloud speech-to-speech.
 
 | Platform | Status      |
