@@ -344,10 +344,11 @@ install_modules_dependencies(s)   # <-- enables new-arch / codegen / Folly flags
 4. ✅ `createEngine` shape verified in 3.2.3 `Switchboard.hpp`: `callAction('switchboard','createEngine', <graphConfig>)` → engine `ObjectURI`; `destroyEngine(engineURI)` also available. Node addressing = bare names.
 → **All Phase-0 unknowns retired. Ready for Phase 1.**
 
-**Phase 1 — TurboModule skeleton (iOS)**
-- Add `src/NativeEdgeSpeech.ts`, `codegenConfig`, `react-native.config.js`, `cpp/NativeEdgeSpeech.*`, `ios/EdgeSpeechModuleProvider.*`, new podspec.
-- Remove Swift files + Expo config + `shared/` stub.
-- Get it to compile & load in the example; verify a trivial `processCommand` round-trips.
+**Phase 1 — TurboModule skeleton (iOS) — ✅ code complete; native build pending**
+- ✅ Added `src/NativeEdgeSpeech.ts`, `codegenConfig`, `react-native.config.js`, `cpp/NativeEdgeSpeech.*`, `ios/EdgeSpeechModuleProvider.*`, new podspec — plus the full TS transport + `VoiceEngine` + façade (the interdependence made a partial skeleton pointless).
+- ✅ Removed Swift files + Expo config + `shared/` stub.
+- ✅ JS verified: tsc clean, jest 76 passed (incl. new transport/barge-in/GPU tests), build + lint clean.
+- [ ] Compile & load in the example (needs framework download + Xcode); verify a real `processCommand` round-trip on device/simulator.
 → Check in.
 
 **Phase 2 — Port the listening pipeline (VAD → STT)**
