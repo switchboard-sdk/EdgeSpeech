@@ -39,7 +39,7 @@ Replace EdgeSpeech's current **Expo Modules API (Swift)** implementation with th
 ### SDK version note
 
 - **Locked: stay on `release/3.2.3`** (owner decision, 2026-07-19). No version bump.
-- **Confirmed (owner): 3.2.3 ships the C++ JSON-RPC surface** (`SwitchboardJSONRPC` + required headers). The main feasibility risk is retired — the thin-native delegate approach is viable on the version EdgeSpeech already uses. Phase 0 can spot-check the exact header path but this no longer gates the migration.
+- **✅ Verified (downloaded & inspected 3.2.3):** `SwitchboardSDK.zip` ships `include/switchboard/SwitchboardJSONRPC.hpp` — identical `processCommand`/`setEventCallback` API to 3.2.4 — and `Switchboard.hpp` with `createEngine → ObjectURI` and `destroyEngine`. `SWITCHBOARD_VERSION_NAME == "3.2.3"`. The thin-native delegate is viable on the pinned version with **no bump**; feasibility risk retired.
 
 ---
 
