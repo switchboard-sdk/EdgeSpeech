@@ -141,11 +141,13 @@ Every Swift SDK call has a direct RPC equivalent. This table is the core of the 
 |---|---|
 | `SBOnnxExtension.loadExtension()` … (4 extensions) | **Two layers:** TS declares the set in the `initialize` `extensions` map (row below); the C++ ctor also calls `::load()` once per extension (§7). |
 | `Switchboard.initialize(withConfig: {appID, appSecret, extensions})` | `client.callAction('switchboard', 'initialize', { appID, appSecret, extensions: { Onnx:{}, SileroVAD:{}, Whisper:{}, Sherpa:{} } })` |
-| `Switchboard.createEngine(withConfig: config)` → `engineId` | `client.callAction('switchboard', 'createEngine', { config })` → `result` (engineId) — *confirm exact action name in Phase 1* |
+| `Switchboard.createEngine(withConfig: config)` → `engineId` | ✅ `client.callAction('switchboard', 'createEngine', graphConfig)` → `result` is the engine `ObjectURI`. Pass the graph config **as the action params directly** (mirrors the C++ `createEngine(config)` signature; confirm the exact wrapping on first run). |
 
-> **Node addressing (resolved):** nodes are targeted by **bare name** — `ttsNode`,
+> **Node addressing (verified):** nodes are targeted by **bare name** — `ttsNode`,
 > `sttNode`, `vadNode` (no engine-ID prefix). Engine-level actions (`start`/`stop`,
-> `voiceProcessingEnabled`) target the **engine ID** returned by `createEngine`.
+> `voiceProcessingEnabled`) target the **engine `ObjectURI`** returned by
+> `createEngine`. Teardown can call `callAction('switchboard', 'destroyEngine', <engineURI>)`
+> (available in 3.2.3) in addition to the Swift approach of `stop` + dropping the ref.
 | `Switchboard.setValue(true, forKey:"voiceProcessingEnabled", onObject: id)` | `client.setValue(engineId, 'voiceProcessingEnabled', true)` |
 | `Switchboard.callAction(id, "start", nil)` | `client.callAction(engineId, 'start', {})` |
 | `Switchboard.callAction(id, "stop", nil)` | `client.callAction(engineId, 'stop', {})` |
@@ -215,8 +217,8 @@ private:
 // NativeEdgeSpeech.cpp (essence)
 #include "OnnxExtension.hpp"
 #include "SileroVADExtension.hpp"
-#include "WhisperExtension.hpp"   // exact header/namespace TBD in Phase 0
-#include "SherpaExtension.hpp"    // exact header/namespace TBD in Phase 0
+#include "WhisperExtension.hpp"   // per SDK convention; auto-confirmed on Phase-1 download
+#include "SherpaExtension.hpp"    // per SDK convention; auto-confirmed on Phase-1 download
 
 NativeEdgeSpeech::NativeEdgeSpeech(std::shared_ptr<CallInvoker> js)
     : NativeEdgeSpeechCxxSpec(std::move(js)) {
@@ -335,12 +337,12 @@ install_modules_dependencies(s)   # <-- enables new-arch / codegen / Folly flags
 
 > Per CLAUDE.md: keep `PROGRESS.md` / `TODO.md` updated and **check in after each phase**.
 
-**Phase 0 — Verification & spike (no product code)**
-1. SDK version locked at 3.2.3 (Whisper/Sherpa already known-good there).
-2. C++ JSON-RPC surface at 3.2.3 confirmed by owner; optional spot-check of the exact `include/switchboard/SwitchboardJSONRPC.hpp` path when unzipping.
-3. Look up the exact Whisper/Sherpa C++ extension header names + namespaces (SileroVAD/Onnx copied from EdgeAudio).
-4. Node URI scheme resolved (bare names). Confirm only the `createEngine` RPC shape (action name + how the engine ID comes back) — via the SDK headers or a throwaway `processCommand` call.
-→ **Check in with findings before writing code.**
+**Phase 0 — Verification & spike (no product code) — ✅ DONE**
+1. ✅ SDK version locked at 3.2.3.
+2. ✅ Downloaded & inspected `builds/release/3.2.3/ios/SwitchboardSDK.zip`: `include/switchboard/SwitchboardJSONRPC.hpp` present (same API as 3.2.4); `SWITCHBOARD_VERSION_NAME == "3.2.3"`.
+3. ✅ Extension convention verified from SileroVAD/Onnx headers: file `<Name>Extension.hpp`, `namespace switchboard::extensions::<name>`, static `load()` (+ `sb_extension_load()`). Whisper/Sherpa follow it → `WhisperExtension`/`SherpaExtension` in `…::whisper`/`…::sherpa` (exact names auto-confirmed when the 332 MB/488 MB packages download in Phase 1; not pulled now).
+4. ✅ `createEngine` shape verified in 3.2.3 `Switchboard.hpp`: `callAction('switchboard','createEngine', <graphConfig>)` → engine `ObjectURI`; `destroyEngine(engineURI)` also available. Node addressing = bare names.
+→ **All Phase-0 unknowns retired. Ready for Phase 1.**
 
 **Phase 1 — TurboModule skeleton (iOS)**
 - Add `src/NativeEdgeSpeech.ts`, `codegenConfig`, `react-native.config.js`, `cpp/NativeEdgeSpeech.*`, `ios/EdgeSpeechModuleProvider.*`, new podspec.
@@ -371,8 +373,8 @@ install_modules_dependencies(s)   # <-- enables new-arch / codegen / Folly flags
 ## 13. Risks & open questions
 
 - **Q1 — Simulator GPU:** **Resolved** — add a native `isSimulator(): boolean` to the TurboModule spec; `VoiceEngine` sets `useGPU: !isSimulator`. (RN `Platform` only gives ios/android; EdgeAudio has no precedent — cloud-based.)
-- **Q2 — Object URIs:** **Resolved (owner): nodes use bare names** (`ttsNode`, `sttNode`, `vadNode`); no engine-ID prefix. Engine-level actions target the ID from `createEngine`. Only remaining detail: the exact `createEngine` RPC shape (confirm in Phase 1).
-- **Q3 — C++ extension loading:** **Resolved** — copy EdgeAudio's two-layer pattern (TS `initialize` extensions map + C++ ctor `::load()` per extension). Only the exact Whisper/Sherpa header names + namespaces need a Phase-0 lookup.
+- **Q2 — Object URIs:** **Resolved & verified** — nodes use bare names (`ttsNode`, `sttNode`, `vadNode`); engine-level actions use the `createEngine` `ObjectURI`. `createEngine` = `callAction('switchboard','createEngine', graphConfig)` → engine URI (verified in 3.2.3 `Switchboard.hpp`).
+- **Q3 — C++ extension loading:** **Resolved & verified** — two-layer (TS `initialize` map + C++ ctor `::load()`). Convention verified from SileroVAD/Onnx headers: `<Name>Extension.hpp`, `namespace switchboard::extensions::<name>`, static `load()`. Whisper/Sherpa follow it (auto-confirmed when their packages download in Phase 1).
 - **Q4 — SDK version:** ~~bump 3.2.3 → 3.2.4?~~ **Resolved: stay on 3.2.3.** (Phase 0 must confirm 3.2.3 ships the C++ JSON-RPC header — see §2.)
 - **Q5 — RN version:** **Resolved** — stay on RN 0.81.5 / Expo SDK 54 (avoids dragging an Expo SDK upgrade into this work; 0.81 already supports C++ TurboModules + `ios.modulesProvider`). Peer floor set to `>=0.81.0`.
 - **Q6 — Framework download path:** keep the JS S3 postinstall vs move to podspec `prepare_command`. Recommend keeping postinstall, but it must also place the C++ `include/` headers.
