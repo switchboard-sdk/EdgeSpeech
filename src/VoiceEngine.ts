@@ -21,8 +21,12 @@ export type EdgeSpeechEventName = keyof EdgeSpeechEventMap
 
 type Listener = (payload: unknown) => void
 
-/** Extensions the SDK must initialize. ONNX underpins SileroVAD. */
-const EXTENSIONS = { Onnx: {}, SileroVAD: {}, Whisper: {}, Sherpa: {} }
+/**
+ * Extensions the SDK must initialize. ONNX underpins Silero VAD. Note the key is
+ * `Silero` (the name the C++ SileroVADExtension registers) — not `SileroVAD`,
+ * which was the Objective-C extension's name in the old Expo implementation.
+ */
+const EXTENSIONS = { Onnx: {}, Silero: {}, Whisper: {}, Sherpa: {} }
 
 interface VoiceEngineConfig {
   vadSensitivity: number
@@ -92,8 +96,18 @@ class VoiceEngine {
       extensions: EXTENSIONS,
     })
     if (res.error) {
-      this.emitError('NOT_INITIALIZED', res.error.message)
-      throw new Error(`Switchboard initialization failed: ${res.error.message}`)
+      const message = res.error.message ?? ''
+      // The native SDK is a process-global singleton that outlives JS bundle
+      // reloads (Fast Refresh, dev reopen). A repeat initialize then reports
+      // "already been initialized" — treat that as success so the app doesn't
+      // red-box on reload.
+      // STOPGAP: matching on the error string is brittle — see TECH_DEBT.md #1.
+      if (/already.*initialized/i.test(message)) {
+        this.isInitialized = true
+        return
+      }
+      this.emitError('NOT_INITIALIZED', message)
+      throw new Error(`Switchboard initialization failed: ${message}`)
     }
     this.isInitialized = true
   }
@@ -247,7 +261,7 @@ class VoiceEngine {
             { id: 'busSplitterNode', type: 'BusSplitter' },
             {
               id: 'vadNode',
-              type: 'SileroVAD.VAD',
+              type: 'Silero.VAD',
               config: {
                 frameSize: 512,
                 threshold: this.config.vadSensitivity,

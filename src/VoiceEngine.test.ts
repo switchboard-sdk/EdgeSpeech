@@ -48,7 +48,7 @@ describe('VoiceEngine transport', () => {
     expect(init!.params.params.appSecret).toBe('app-secret')
     expect(init!.params.params.extensions).toEqual({
       Onnx: {},
-      SileroVAD: {},
+      Silero: {},
       Whisper: {},
       Sherpa: {},
     })
