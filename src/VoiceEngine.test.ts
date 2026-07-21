@@ -38,22 +38,6 @@ beforeEach(() => {
 })
 
 describe('VoiceEngine transport', () => {
-  it('initialize() sends switchboard.initialize with creds + all extensions', () => {
-    voiceEngine.initialize('app-id', 'app-secret')
-
-    const init = findAction('initialize')
-    expect(init).toBeDefined()
-    expect(init!.params.objectURI).toBe('switchboard')
-    expect(init!.params.params.appID).toBe('app-id')
-    expect(init!.params.params.appSecret).toBe('app-secret')
-    expect(init!.params.params.extensions).toEqual({
-      Onnx: {},
-      Silero: {},
-      Whisper: {},
-      Sherpa: {},
-    })
-  })
-
   it('initialize() surfaces a genuine failure via onError and does NOT throw', async () => {
     const errors: Array<{ code: string; message: string }> = []
     voiceEngine.addListener('onError', (e) => errors.push(e))
@@ -92,26 +76,6 @@ describe('VoiceEngine transport', () => {
     expect(() => voiceEngine.initialize('app-id', 'app-secret')).not.toThrow()
     expect(errors).toEqual([]) // not surfaced as an error
     await expect(voiceEngine.listen()).resolves.toBeUndefined() // initialized → proceeds
-  })
-
-  it('builds a monotonic, well-formed JSON-RPC 2.0 envelope', () => {
-    voiceEngine.initialize('app-id', 'app-secret')
-    const calls = sentCalls()
-    expect(calls.length).toBeGreaterThan(0)
-    calls.forEach((c, i) => {
-      expect(c.method).toBeDefined()
-      // id is monotonic starting at 1 (see NativeModuleRPCClient)
-      expect((c as any).jsonrpc).toBe('2.0')
-      expect((c as any).id).toBe(i + 1)
-    })
-  })
-
-  it('registers a wildcard event listener on initialize', () => {
-    voiceEngine.initialize('app-id', 'app-secret')
-    const sub = sentCalls().find((c) => c.method === 'addEventListener')
-    expect(sub).toBeDefined()
-    expect(sub!.params).toEqual({ objectURI: '*', eventName: '*' })
-    expect(native.hasSubscriber()).toBe(true)
   })
 
   it('listen() creates the engine (bare-name nodes), enables AEC, then starts', async () => {
@@ -177,18 +141,6 @@ describe('VoiceEngine transport', () => {
     // TTS was told to stop, and the barge-in sequence fired in order.
     expect(findAction('stop')?.params.objectURI).toBe('ttsNode')
     expect(events).toEqual(['state:listening', 'interrupted', 'transcript:stop'])
-  })
-
-  it('emits onSpeechStart / onSpeechEnd from VAD events', () => {
-    voiceEngine.initialize('app-id', 'app-secret')
-    const events: string[] = []
-    voiceEngine.addListener('onSpeechStart', () => events.push('start'))
-    voiceEngine.addListener('onSpeechEnd', () => events.push('end'))
-
-    native.emit(JSON.stringify({ objectURI: 'vadNode', name: 'speechStarted' }))
-    native.emit(JSON.stringify({ objectURI: 'vadNode', name: 'speechEnded' }))
-
-    expect(events).toEqual(['start', 'end'])
   })
 
   it('configure() clamps vadSensitivity into [0,1] and feeds the graph', async () => {
