@@ -44,27 +44,41 @@ npm install @synervoz/edgespeech
 
 ### Requirements
 
-| Requirement       | Minimum |
-| ----------------- | ------- |
-| React Native      | 0.74+   |
-| iOS               | 13.4+   |
-| Node.js           | 22+     |
-| expo-modules-core | 2.0.0+  |
+| Requirement      | Minimum            |
+| ---------------- | ------------------ |
+| React Native     | 0.81+              |
+| New Architecture | Required (enabled) |
+| iOS              | 13.4+              |
+| Node.js          | 22+                |
 
-### iOS Setup with Expo
+EdgeSpeech is a bare React Native **C++ TurboModule** and requires the **[New Architecture](https://reactnative.dev/architecture/landing-page)**. It
+works in both Expo (prebuild) and bare React Native apps — it does **not** use the Expo Modules API.
 
-Add microphone permission to your `Info.plist` (or via `app.json` `infoPlist` for Expo managed workflow):
+### iOS Setup
+
+**1. Enable the New Architecture.**
+
+- **Expo:** set `"newArchEnabled": true` in `app.json` (the default in recent Expo SDKs).
+- **Bare RN:** the default from RN 0.76+ (for older setups, `RCT_NEW_ARCH_ENABLED=1` at `pod install`).
+
+**2. Add microphone permission** to your `Info.plist` (or via `app.json` `infoPlist` on Expo):
 
 ```xml
 <key>NSMicrophoneUsageDescription</key>
 <string>This app needs microphone access for voice input</string>
 ```
 
-Build your app:
+**3. Build:**
 
 ```bash
 npx expo run:ios
 ```
+
+> [!NOTE]
+> A `postinstall` script downloads the native Switchboard frameworks into
+> `ios/Frameworks/` — they aren't bundled in the package. If your package manager blocks install
+> scripts (e.g. npm 11+), run it once manually:
+> `node node_modules/@synervoz/edgespeech/scripts/postinstall.js`.
 
 ## API Reference
 

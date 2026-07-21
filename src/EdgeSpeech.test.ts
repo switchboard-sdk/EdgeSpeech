@@ -1,7 +1,8 @@
 import { EdgeSpeech } from './EdgeSpeech'
 import type { VoiceConfig } from './types'
 
-// Mock the native module (SwitchboardVoiceModule uses expo-modules-core, so mock it directly)
+// Mock the SwitchboardVoiceModule façade directly — it wraps the native TurboModule
+// (via TurboModuleRegistry.getEnforcing), which isn't registered under Jest.
 jest.mock('../src/SwitchboardVoiceModule', () => ({
   __esModule: true,
   default: {
