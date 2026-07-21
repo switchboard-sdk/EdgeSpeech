@@ -54,6 +54,46 @@ describe('VoiceEngine transport', () => {
     })
   })
 
+  it('initialize() surfaces a genuine failure via onError and does NOT throw', async () => {
+    const errors: Array<{ code: string; message: string }> = []
+    voiceEngine.addListener('onError', (e) => errors.push(e))
+    native.default.processCommand.mockImplementation((cmd: string) => {
+      const { id, params } = JSON.parse(cmd)
+      if (params?.actionName === 'initialize') {
+        return JSON.stringify({ jsonrpc: '2.0', id, error: { code: -32000, message: 'bad credentials' } })
+      }
+      return JSON.stringify({ jsonrpc: '2.0', id, result: null })
+    })
+
+    expect(() => voiceEngine.initialize('app-id', 'app-secret')).not.toThrow()
+    expect(errors).toEqual([{ code: 'INIT_FAILED', message: 'bad credentials' }])
+    // Stayed uninitialized, so a later action rejects rather than proceeding.
+    await expect(voiceEngine.listen()).rejects.toThrow(/not initialized/i)
+  })
+
+  it('initialize() treats "already been initialized" as success (reload case)', async () => {
+    const errors: unknown[] = []
+    voiceEngine.addListener('onError', (e) => errors.push(e))
+    native.default.processCommand.mockImplementation((cmd: string) => {
+      const { id, params } = JSON.parse(cmd)
+      if (params?.actionName === 'initialize') {
+        return JSON.stringify({
+          jsonrpc: '2.0',
+          id,
+          error: { code: -32000, message: 'SwitchboardSDK has already been initialized.' },
+        })
+      }
+      if (params?.actionName === 'createEngine') {
+        return JSON.stringify({ jsonrpc: '2.0', id, result: 'engine_1' })
+      }
+      return JSON.stringify({ jsonrpc: '2.0', id, result: null })
+    })
+
+    expect(() => voiceEngine.initialize('app-id', 'app-secret')).not.toThrow()
+    expect(errors).toEqual([]) // not surfaced as an error
+    await expect(voiceEngine.listen()).resolves.toBeUndefined() // initialized → proceeds
+  })
+
   it('builds a monotonic, well-formed JSON-RPC 2.0 envelope', () => {
     voiceEngine.initialize('app-id', 'app-secret')
     const calls = sentCalls()

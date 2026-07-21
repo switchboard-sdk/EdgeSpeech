@@ -97,17 +97,22 @@ class VoiceEngine {
     })
     if (res.error) {
       const message = res.error.message ?? ''
-      // The native SDK is a process-global singleton that outlives JS bundle
-      // reloads (Fast Refresh, dev reopen). A repeat initialize then reports
-      // "already been initialized" — treat that as success so the app doesn't
+      // The native SDK is a process-global singleton that survives JS bundle
+      // reloads (Fast Refresh / dev reopen); a repeat initialize then reports
+      // "already been initialized". Treat that as success so the app doesn't
       // red-box on reload.
-      // STOPGAP: matching on the error string is brittle — see TECH_DEBT.md #1.
+      // NOTE (stopgap): matching on the error text is brittle — a stable error
+      // code or an SDK init-state query would be more robust.
       if (/already.*initialized/i.test(message)) {
         this.isInitialized = true
         return
       }
-      this.emitError('NOT_INITIALIZED', message)
-      throw new Error(`Switchboard initialization failed: ${message}`)
+      // Surface genuine failures via onError and stay uninitialized (a later
+      // listen()/speak() then rejects NOT_INITIALIZED). Don't throw:
+      // EdgeSpeechProvider calls initialize() inside an effect, so throwing would
+      // red-box the app instead of firing onError — matches the original module.
+      this.emitError('INIT_FAILED', message)
+      return
     }
     this.isInitialized = true
   }
@@ -131,7 +136,7 @@ class VoiceEngine {
 
   async listen(): Promise<void> {
     if (!this.isInitialized) {
-      throw this.fail('NOT_INITIALIZED', 'Switchboard SDK not initialized. Call initialize() first.')
+      throw this.makeError('NOT_INITIALIZED', 'Switchboard SDK not initialized. Call initialize() first.')
     }
     if (!this.engineId) {
       this.createEngine()
@@ -141,7 +146,7 @@ class VoiceEngine {
     }
     const res = this.ensureClient().callAction(this.engineId!, 'start', {})
     if (res.error) {
-      throw this.fail('LISTEN_FAILED', res.error.message)
+      throw this.makeError('LISTEN_FAILED', res.error.message)
     }
     this.isListening = true
     this.setState('listening')
@@ -153,7 +158,7 @@ class VoiceEngine {
     }
     const res = this.ensureClient().callAction(this.engineId, 'stop', {})
     if (res.error) {
-      throw this.fail('STOP_LISTENING_FAILED', res.error.message)
+      throw this.makeError('STOP_LISTENING_FAILED', res.error.message)
     }
     this.isListening = false
     this.isSpeaking = false
@@ -162,7 +167,7 @@ class VoiceEngine {
 
   async speak(text: string): Promise<void> {
     if (!this.isInitialized) {
-      throw this.fail('NOT_INITIALIZED', 'Switchboard SDK not initialized. Call initialize() first.')
+      throw this.makeError('NOT_INITIALIZED', 'Switchboard SDK not initialized. Call initialize() first.')
     }
     if (!text) {
       return
@@ -174,7 +179,7 @@ class VoiceEngine {
     if (!this.isListening) {
       const startRes = this.ensureClient().callAction(this.engineId!, 'start', {})
       if (startRes.error) {
-        throw this.fail('LISTEN_FAILED', startRes.error.message)
+        throw this.makeError('LISTEN_FAILED', startRes.error.message)
       }
       this.isListening = true
       this.setState('listening')
@@ -182,7 +187,7 @@ class VoiceEngine {
 
     const res = this.ensureClient().callAction('ttsNode', 'synthesize', { text })
     if (res.error) {
-      throw this.fail('SPEAK_FAILED', res.error.message)
+      throw this.makeError('SPEAK_FAILED', res.error.message)
     }
     this.isSpeaking = true
     this.setState('speaking')
@@ -199,8 +204,14 @@ class VoiceEngine {
     this.setState(this.isListening ? 'listening' : 'idle')
   }
 
-  requestMicrophonePermission(): Promise<boolean> {
-    return NativeEdgeSpeech.requestMicrophonePermission()
+  async requestMicrophonePermission(): Promise<boolean> {
+    const granted = await NativeEdgeSpeech.requestMicrophonePermission()
+    if (!granted) {
+      // Match the original module: reject on denial. The useEdgeSpeech hook
+      // catches this and surfaces the message as `error`.
+      throw this.makeError('PERMISSION_DENIED', 'Microphone permission was denied')
+    }
+    return granted
   }
 
   // MARK: - Engine management
@@ -214,7 +225,7 @@ class VoiceEngine {
     const res = client.callAction('switchboard', 'createEngine', this.buildGraphConfig())
     if (res.error || typeof res.result !== 'string') {
       const message = res.error?.message ?? 'Unknown error'
-      throw this.fail('ENGINE_CREATION_FAILED', `Failed to create audio engine: ${message}`)
+      throw this.makeError('ENGINE_CREATION_FAILED', `Failed to create audio engine: ${message}`)
     }
     this.engineId = res.result
 
@@ -381,10 +392,16 @@ class VoiceEngine {
     this.listeners.get('onError')?.forEach((listener) => listener({ code, message }))
   }
 
-  /** Emit onError and return an Error to throw from the failing action. */
-  private fail(code: string, message: string): Error {
-    this.emitError(code, message)
-    return new Error(message)
+  /**
+   * Build an Error (carrying a machine `code`) to reject a failing action with.
+   * The useEdgeSpeech hook catches the rejection and surfaces the message as
+   * `error`. Mirrors the original module, which rejected action promises and did
+   * not additionally emit onError for action failures.
+   */
+  private makeError(code: string, message: string): Error {
+    const error = new Error(message)
+    ;(error as { code?: string }).code = code
+    return error
   }
 
   /**
