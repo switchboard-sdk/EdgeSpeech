@@ -51,7 +51,7 @@ npm install @synervoz/edgespeech
 | iOS              | 13.4+              |
 | Node.js          | 22+                |
 
-EdgeSpeech is a bare React Native **C++ TurboModule** and requires the **New Architecture**. It
+EdgeSpeech is a bare React Native **C++ TurboModule** and requires the **[New Architecture](https://reactnative.dev/architecture/landing-page)**. It
 works in both Expo (prebuild) and bare React Native apps — it does **not** use the Expo Modules API.
 
 ### iOS Setup
