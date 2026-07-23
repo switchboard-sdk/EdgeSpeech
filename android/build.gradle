@@ -1,0 +1,79 @@
+// React Native Android library module for EdgeSpeech.
+//
+// Provides codegen for the TurboModule spec and the Switchboard SDK + extension
+// dependencies. The shared C++ TurboModule (../cpp) is compiled and registered
+// in the *consuming app's* native build via RN's C++ autolinking — see
+// react-native.config.js (android cxx* keys) and android/CMakeLists.txt. The app
+// therefore links Switchboard through Prefab; this module just makes the AARs
+// (and their Prefab packages) available to it via `api`.
+apply plugin: "com.android.library"
+apply plugin: "org.jetbrains.kotlin.android"
+apply plugin: "com.facebook.react"
+
+def safeExtGet(prop, fallback) {
+    rootProject.ext.has(prop) ? rootProject.ext.get(prop) : fallback
+}
+
+// Matches the iOS SDK version (scripts/postinstall.js SDK_VERSION = release/3.2.3).
+def switchboardSdkVersion = "3.2.3"
+
+// ── Zero-config wiring for the consuming app ─────────────────────────────────
+// The Switchboard C++ TurboModule is compiled in the *app's* native build (RN
+// C++ autolinking), so the app must (a) know the Switchboard Maven repo and
+// (b) enable Prefab. Inject both from here so an app only ever needs to
+// `npm install` + import — no manual android/ edits.
+rootProject.allprojects {
+    repositories {
+        maven { url "https://s3.amazonaws.com/synervoz-android-maven-repository" }
+    }
+}
+rootProject.subprojects { sp ->
+    sp.plugins.withId("com.android.application") {
+        sp.android.buildFeatures.prefab = true
+    }
+}
+
+react {
+    // Codegen reads the TurboModule spec from the package's TS sources and
+    // generates RNEdgeSpeechSpec (matches package.json codegenConfig.name).
+    jsRootDir = file("../src/")
+    libraryName = "RNEdgeSpeechSpec"
+    codegenJavaPackageName = "com.synervoz.edgespeech"
+}
+
+android {
+    namespace "com.synervoz.edgespeech"
+    compileSdk safeExtGet("compileSdkVersion", 35)
+
+    defaultConfig {
+        minSdkVersion safeExtGet("minSdkVersion", 24)
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+}
+
+repositories {
+    mavenCentral()
+    google()
+    // Switchboard SDK + extensions.
+    maven { url "https://s3.amazonaws.com/synervoz-android-maven-repository" }
+}
+
+dependencies {
+    implementation "com.facebook.react:react-android"
+
+    // `api` so the Switchboard AARs (and their Prefab packages) are visible to
+    // the consuming app's native build, which is where our cpp is compiled.
+    api "com.synervoz.switchboard:switchboardsdk:${switchboardSdkVersion}"
+    api "com.synervoz.switchboard.extensions:onnx:${switchboardSdkVersion}"
+    api "com.synervoz.switchboard.extensions:silerovad:${switchboardSdkVersion}"
+    api "com.synervoz.switchboard.extensions:whisper:${switchboardSdkVersion}"
+    api "com.synervoz.switchboard.extensions:sherpa:${switchboardSdkVersion}"
+}
