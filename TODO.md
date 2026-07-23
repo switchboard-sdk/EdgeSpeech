@@ -17,10 +17,13 @@ the full plan and locked decisions.
 - [ ] Check in with user
 
 ## Phase B — Listening pipeline (VAD → STT)
-- [ ] `PermissionsAndroid.request(RECORD_AUDIO)` branch in mic-permission fn
-- [ ] `useGPU = false` on Android in `VoiceEngine.ts`
-- [ ] Confirm Whisper model provisioning on Android
-- [ ] `onTranscript` fires end-to-end on device/emulator
+- [x] `PermissionsAndroid.request(RECORD_AUDIO)` branch in mic-permission fn
+- [x] `useGPU = false` on Android in `VoiceEngine.ts`
+- [x] Android-branch unit tests (useGPU + permission), 77 tests pass, tsc + eslint clean
+- [x] `dist/` rebuilt with Android branches
+- [x] Example buildable for device: x86 excluded (durable) + NDK r29 pinned (app module)
+- [ ] Confirm Whisper model provisioning on Android (during device test)
+- [ ] `onTranscript` fires end-to-end on device (USER to test on phone)
 
 ## Phase C — Speaking pipeline (TTS)
 - [ ] Sherpa TTS plays through Android speaker; `onStateChange` transitions

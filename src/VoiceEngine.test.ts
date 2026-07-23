@@ -163,3 +163,44 @@ describe('VoiceEngine transport', () => {
     expect(sttNode.config.useGPU).toBe(false)
   })
 })
+
+describe('VoiceEngine Android platform branches', () => {
+  const RN = require('react-native')
+  const originalOS = RN.Platform.OS
+
+  afterEach(() => {
+    RN.Platform.OS = originalOS
+    jest.restoreAllMocks()
+  })
+
+  it('forces Whisper useGPU=false on Android even when not a simulator', async () => {
+    RN.Platform.OS = 'android'
+    native.default.isSimulator.mockReturnValue(false) // would enable GPU on an iOS device
+    voiceEngine.initialize('app-id', 'app-secret')
+    await voiceEngine.listen()
+
+    const create = findAction('createEngine')!
+    const sttNode = create.params.params.config.graph.nodes.find((n: any) => n.id === 'sttNode')
+    expect(sttNode.config.useGPU).toBe(false)
+  })
+
+  it('requestMicrophonePermission uses PermissionsAndroid (not the native hook) on Android', async () => {
+    RN.Platform.OS = 'android'
+    const req = jest
+      .spyOn(RN.PermissionsAndroid, 'request')
+      .mockResolvedValue(RN.PermissionsAndroid.RESULTS.GRANTED)
+
+    await expect(voiceEngine.requestMicrophonePermission()).resolves.toBe(true)
+    expect(req).toHaveBeenCalledWith(RN.PermissionsAndroid.PERMISSIONS.RECORD_AUDIO)
+    expect(native.default.requestMicrophonePermission).not.toHaveBeenCalled()
+  })
+
+  it('requestMicrophonePermission throws PERMISSION_DENIED when Android denies', async () => {
+    RN.Platform.OS = 'android'
+    jest
+      .spyOn(RN.PermissionsAndroid, 'request')
+      .mockResolvedValue(RN.PermissionsAndroid.RESULTS.DENIED)
+
+    await expect(voiceEngine.requestMicrophonePermission()).rejects.toThrow(/denied/i)
+  })
+})

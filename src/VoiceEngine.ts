@@ -1,3 +1,4 @@
+import { Platform, PermissionsAndroid } from 'react-native'
 import NativeEdgeSpeech from './NativeEdgeSpeech'
 import { NativeModuleRPCClient } from './NativeModuleRPCClient'
 import { SwitchboardClient } from './SwitchboardClient'
@@ -205,7 +206,14 @@ class VoiceEngine {
   }
 
   async requestMicrophonePermission(): Promise<boolean> {
-    const granted = await NativeEdgeSpeech.requestMicrophonePermission()
+    // On Android the native C++ mic hook is not installed (it's iOS-only), so
+    // request the RECORD_AUDIO runtime permission from JS. iOS goes through the
+    // native provider hook (AVAudioApplication/AVAudioSession).
+    const granted =
+      Platform.OS === 'android'
+        ? (await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.RECORD_AUDIO)) ===
+          PermissionsAndroid.RESULTS.GRANTED
+        : await NativeEdgeSpeech.requestMicrophonePermission()
     if (!granted) {
       // Match the original module: reject on denial. The useEdgeSpeech hook
       // catches this and surfaces the message as `error`.
@@ -255,7 +263,9 @@ class VoiceEngine {
    */
   private buildGraphConfig(): object {
     // Whisper's Metal GPU path crashes in the iOS Simulator, so gate on it.
-    const useGPU = !NativeEdgeSpeech.isSimulator()
+    // Android has no Metal backend — run Whisper on CPU there (revisit for a
+    // Vulkan/OpenCL path later).
+    const useGPU = Platform.OS !== 'android' && !NativeEdgeSpeech.isSimulator()
 
     return {
       type: 'Realtime',
