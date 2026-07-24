@@ -1,32 +1,42 @@
 #!/usr/bin/env node
 /**
- * Download the on-device Whisper models into the Android app's assets.
+ * Download the on-device models into the Android app's assets.
  *
- * Unlike iOS (where the models are bundled inside SwitchboardWhisper.xcframework),
- * the Android Whisper AAR ships no model — the `Whisper.STT` node loads a ggml
- * model from an absolute file path (`modelPath`). So the app must ship the model
- * in its assets; the EdgeSpeech native layer (EdgeSpeechModelsModule) then copies
- * it to filesDir on first run and hands the path to the STT node.
+ * Unlike iOS (where models are bundled inside the SDK xcframeworks), the Android
+ * AARs ship no models — the Whisper node loads a ggml model from an absolute
+ * `modelPath`, and the Sherpa TTS node loads from absolute `modelPath` /
+ * `tokensPath` / `dataPath`. So the app ships the models in its assets and the
+ * EdgeSpeech native layer (EdgeSpeechModelsModule) materializes them onto disk
+ * (filesDir) on first run, then hands the paths to the nodes' `loadModel` action.
  *
- * This places the models under the app's `assets/models/whisper/` so they are
- * packaged into the APK. Idempotent: skips a file already present at the right
- * size. Re-run after `expo prebuild --clean` (which regenerates android/).
+ * This places:
+ *   - Whisper ggml models under assets/models/whisper/
+ *   - the Sherpa TTS voice zip under assets/models/sherpa/tts/
+ * so they are packaged into the APK. Idempotent (skips a file already present at
+ * the right size). Re-run after `expo prebuild --clean` (which regenerates android/).
  *
  * Usage:
- *   node scripts/download-android-models.js [targetAssetsDir]
- * Default targetAssetsDir:
- *   example/android/app/src/main/assets/models/whisper
+ *   node scripts/download-android-models.js [assetsRootDir]
+ * Default assetsRootDir:
+ *   example/android/app/src/main/assets
  */
 const fs = require('fs')
 const path = require('path')
 const https = require('https')
 
-const BASE_URL = 'https://switchboard-sdk-public.s3.amazonaws.com/assets/models/whisper'
-const MODELS = ['ggml-base.en.bin', 'ggml-tiny.en.bin']
+const S3 = 'https://switchboard-sdk-public.s3.amazonaws.com/assets/models'
 
-const targetDir =
+const assetsRoot =
   process.argv[2] ||
-  path.join(__dirname, '..', 'example', 'android', 'app', 'src', 'main', 'assets', 'models', 'whisper')
+  path.join(__dirname, '..', 'example', 'android', 'app', 'src', 'main', 'assets')
+
+// Whisper STT ggml models + the default Sherpa TTS voice (en_GB). de_DE is
+// available at ${S3}/sherpa/tts/de_DE.zip — add it here to bundle it too.
+const DOWNLOADS = [
+  { url: `${S3}/whisper/ggml-base.en.bin`, rel: 'models/whisper/ggml-base.en.bin' },
+  { url: `${S3}/whisper/ggml-tiny.en.bin`, rel: 'models/whisper/ggml-tiny.en.bin' },
+  { url: `${S3}/sherpa/tts/en_GB.zip`, rel: 'models/sherpa/tts/en_GB.zip' },
+]
 
 function remoteSize(url) {
   return new Promise((resolve, reject) => {
@@ -81,17 +91,16 @@ function download(url, dest, expectedSize) {
 }
 
 async function main() {
-  fs.mkdirSync(targetDir, { recursive: true })
-  console.log(`Whisper models → ${targetDir}`)
-  for (const name of MODELS) {
-    const url = `${BASE_URL}/${name}`
-    const dest = path.join(targetDir, name)
+  console.log(`Models → ${assetsRoot}`)
+  for (const { url, rel } of DOWNLOADS) {
+    const dest = path.join(assetsRoot, rel)
+    fs.mkdirSync(path.dirname(dest), { recursive: true })
     const size = await remoteSize(url)
     if (fs.existsSync(dest) && fs.statSync(dest).size === size) {
-      console.log(`  ${name}: already present (${size} bytes), skipping`)
+      console.log(`  ${rel}: already present (${size} bytes), skipping`)
       continue
     }
-    console.log(`Downloading ${name} (${Math.round((size / 1048576) * 10) / 10} MB)...`)
+    console.log(`Downloading ${rel} (${Math.round((size / 1048576) * 10) / 10} MB)...`)
     await download(url, dest, size)
   }
   console.log('Done.')

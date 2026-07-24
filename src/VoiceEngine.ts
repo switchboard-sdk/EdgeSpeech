@@ -49,6 +49,30 @@ const ANDROID_MODEL_ASSETS: Record<string, string> = {
 }
 
 /**
+ * Android Sherpa TTS voices, keyed by `ttsVoice`: the bundled zip asset plus the
+ * paths inside it. The zip is extracted once to `filesDir/<ANDROID_TTS_EXTRACT_DIR>`
+ * and the TTS node's `loadModel` action gets the model / tokens / espeak-data
+ * paths. iOS uses the voices bundled in the SDK framework.
+ */
+const ANDROID_TTS_VOICES: Record<
+  string,
+  { zipAsset: string; voiceDir: string; modelFile: string }
+> = {
+  en_GB: {
+    zipAsset: 'models/sherpa/tts/en_GB.zip',
+    voiceDir: 'en_GB/vits-piper-en_GB-southern_english_female-low',
+    modelFile: 'en_GB-southern_english_female-low.with_runtime_opt.ort',
+  },
+  de_DE: {
+    zipAsset: 'models/sherpa/tts/de_DE.zip',
+    voiceDir: 'de_DE/vits-piper-de_DE-thorsten-low',
+    modelFile: 'de_DE-thorsten-low.with_runtime_opt.ort',
+  },
+}
+
+const ANDROID_TTS_EXTRACT_DIR = 'sherpa/tts'
+
+/**
  * The on-device voice pipeline, authored entirely in TypeScript over the
  * Switchboard JSON-RPC channel. This is the TypeScript port of the old native
  * `AudioGraphManager.swift`: it builds the combined VAD → STT + TTS graph,
@@ -76,6 +100,9 @@ class VoiceEngine {
 
   /** Resolved absolute path to the Whisper model on Android (see ensureAndroidModel). */
   private androidModelPath: string | null = null
+
+  /** Whether the Sherpa TTS voice has been loaded into the ttsNode (Android). */
+  private androidTtsLoaded = false
 
   private readonly listeners = new Map<EdgeSpeechEventName, Set<Listener>>()
 
@@ -190,6 +217,51 @@ class VoiceEngine {
     }
   }
 
+  /**
+   * Load the Sherpa TTS voice into the ttsNode on Android (iOS auto-loads the
+   * framework-bundled voice). The voice zip is extracted to filesDir once, then
+   * the node's `loadModel` action is called with the model / tokens / espeak-data
+   * paths. No-op on iOS and once loaded.
+   */
+  private async ensureAndroidTtsModel(): Promise<void> {
+    if (Platform.OS !== 'android' || this.androidTtsLoaded) {
+      return
+    }
+    const voice = ANDROID_TTS_VOICES[this.config.ttsVoice]
+    if (!voice) {
+      throw this.makeError(
+        'TTS_VOICE_UNAVAILABLE',
+        `Unknown ttsVoice '${this.config.ttsVoice}' on Android. Bundle it and add it to ANDROID_TTS_VOICES.`
+      )
+    }
+    const models = NativeModules.EdgeSpeechModels
+    if (!models?.prepareArchive) {
+      throw this.makeError(
+        'TTS_VOICE_UNAVAILABLE',
+        'EdgeSpeechModels native module is unavailable — cannot resolve the TTS voice path on Android.'
+      )
+    }
+    let base: string
+    try {
+      base = await models.prepareArchive(voice.zipAsset, ANDROID_TTS_EXTRACT_DIR)
+    } catch (e) {
+      throw this.makeError(
+        'TTS_MODEL_LOAD_FAILED',
+        `Failed to extract TTS voice '${voice.zipAsset}': ${(e as Error)?.message ?? String(e)}`
+      )
+    }
+    const dir = `${base}/${voice.voiceDir}`
+    const res = this.ensureClient().callAction('ttsNode', 'loadModel', {
+      modelPath: `${dir}/${voice.modelFile}`,
+      tokensPath: `${dir}/tokens.txt`,
+      dataPath: `${dir}/espeak-ng-data`,
+    })
+    if (res.error) {
+      throw this.makeError('TTS_MODEL_LOAD_FAILED', `Sherpa TTS loadModel failed: ${res.error.message}`)
+    }
+    this.androidTtsLoaded = true
+  }
+
   // MARK: - Control
 
   async listen(): Promise<void> {
@@ -235,6 +307,8 @@ class VoiceEngine {
     if (!this.engineId) {
       this.createEngine()
     }
+    // Load the TTS voice lazily on first speak (Android; iOS auto-loads it).
+    await this.ensureAndroidTtsModel()
     // Starting the engine also activates the mic + AEC needed for barge-in.
     if (!this.isListening) {
       const startRes = this.ensureClient().callAction(this.engineId!, 'start', {})
@@ -330,6 +404,8 @@ class VoiceEngine {
     this.engineId = null
     this.isListening = false
     this.isSpeaking = false
+    // A new engine has a fresh, unloaded ttsNode — reload the voice on next speak.
+    this.androidTtsLoaded = false
   }
 
   /**
@@ -506,6 +582,7 @@ class VoiceEngine {
     this.isSpeaking = false
     this.eventsWired = false
     this.androidModelPath = null
+    this.androidTtsLoaded = false
     this.config = {
       vadSensitivity: 0.5,
       sampleRate: 16000,

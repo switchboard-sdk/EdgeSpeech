@@ -4,7 +4,9 @@ import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
+import java.io.BufferedInputStream
 import java.io.File
+import java.util.zip.ZipInputStream
 
 /**
  * Materializes bundled model assets to a real filesystem path.
@@ -57,6 +59,52 @@ class EdgeSpeechModelsModule(private val reactContext: ReactApplicationContext) 
         "Failed to prepare model asset '$assetPath': ${e.message}",
         e,
       )
+    }
+  }
+
+  /**
+   * Extract the zip bundled at assets/[assetZipPath] into filesDir/[destSubdir]
+   * and resolve that directory's absolute path. Used for multi-file models like
+   * the Sherpa TTS voice (model + tokens + espeak-ng-data). Extracts once —
+   * a `.extracted` marker short-circuits subsequent calls.
+   */
+  @ReactMethod
+  fun prepareArchive(assetZipPath: String, destSubdir: String, promise: Promise) {
+    try {
+      val destRoot = File(reactContext.filesDir, destSubdir)
+      val marker = File(destRoot, ".extracted")
+      if (marker.exists()) {
+        promise.resolve(destRoot.absolutePath)
+        return
+      }
+      destRoot.mkdirs()
+      val canonicalRoot = destRoot.canonicalPath
+      reactContext.assets.open(assetZipPath).use { raw ->
+        ZipInputStream(BufferedInputStream(raw)).use { zin ->
+          var entry = zin.nextEntry
+          while (entry != null) {
+            val outFile = File(destRoot, entry.name)
+            // Zip-slip guard: reject entries resolving outside destRoot.
+            if (outFile.canonicalPath != canonicalRoot &&
+              !outFile.canonicalPath.startsWith(canonicalRoot + File.separator)
+            ) {
+              throw SecurityException("Zip entry escapes target dir: ${entry.name}")
+            }
+            if (entry.isDirectory) {
+              outFile.mkdirs()
+            } else {
+              outFile.parentFile?.mkdirs()
+              outFile.outputStream().use { zin.copyTo(it, 1 shl 16) }
+            }
+            zin.closeEntry()
+            entry = zin.nextEntry
+          }
+        }
+      }
+      marker.writeText("ok")
+      promise.resolve(destRoot.absolutePath)
+    } catch (e: Exception) {
+      promise.reject("model_archive_error", "Failed to extract '$assetZipPath': ${e.message}", e)
     }
   }
 

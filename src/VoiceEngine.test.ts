@@ -168,11 +168,22 @@ describe('VoiceEngine Android platform branches', () => {
   const RN = require('react-native')
   const originalOS = RN.Platform.OS
   const ANDROID_MODEL_PATH = '/data/user/0/app/files/models/whisper/ggml-base.en.bin'
+  const TTS_BASE = '/data/user/0/app/files/sherpa/tts'
   let prepareModel: jest.Mock
+  let prepareArchive: jest.Mock
+
+  const ttsLoadCall = () =>
+    sentCalls().find(
+      (c) =>
+        c.method === 'callAction' &&
+        c.params?.actionName === 'loadModel' &&
+        c.params?.objectURI === 'ttsNode'
+    )
 
   beforeEach(() => {
     prepareModel = jest.fn().mockResolvedValue(ANDROID_MODEL_PATH)
-    RN.NativeModules.EdgeSpeechModels = { prepareModel }
+    prepareArchive = jest.fn().mockResolvedValue(TTS_BASE)
+    RN.NativeModules.EdgeSpeechModels = { prepareModel, prepareArchive }
   })
 
   afterEach(() => {
@@ -231,6 +242,38 @@ describe('VoiceEngine Android platform branches', () => {
 
     expect(prepareModel).not.toHaveBeenCalled()
     expect(findAction('loadModel')).toBeUndefined()
+  })
+
+  it('extracts the voice zip and calls loadModel on the Sherpa TTS node on Android', async () => {
+    RN.Platform.OS = 'android'
+    voiceEngine.initialize('app-id', 'app-secret')
+    await voiceEngine.speak('hello')
+
+    expect(prepareArchive).toHaveBeenCalledWith('models/sherpa/tts/en_GB.zip', 'sherpa/tts')
+    const load = ttsLoadCall()!
+    const v = 'en_GB/vits-piper-en_GB-southern_english_female-low'
+    expect(load.params.params.modelPath).toBe(`${TTS_BASE}/${v}/en_GB-southern_english_female-low.with_runtime_opt.ort`)
+    expect(load.params.params.tokensPath).toBe(`${TTS_BASE}/${v}/tokens.txt`)
+    expect(load.params.params.dataPath).toBe(`${TTS_BASE}/${v}/espeak-ng-data`)
+  })
+
+  it('selects the de_DE voice zip when ttsVoice is de_DE', async () => {
+    RN.Platform.OS = 'android'
+    voiceEngine.initialize('app-id', 'app-secret')
+    voiceEngine.configure({ ttsVoice: 'de_DE' })
+    await voiceEngine.speak('hallo')
+
+    expect(prepareArchive).toHaveBeenCalledWith('models/sherpa/tts/de_DE.zip', 'sherpa/tts')
+    expect(ttsLoadCall()!.params.params.modelPath).toContain('de_DE-thorsten-low.with_runtime_opt.ort')
+  })
+
+  it('does not load a TTS voice on iOS', async () => {
+    RN.Platform.OS = 'ios'
+    voiceEngine.initialize('app-id', 'app-secret')
+    await voiceEngine.speak('hello')
+
+    expect(prepareArchive).not.toHaveBeenCalled()
+    expect(ttsLoadCall()).toBeUndefined()
   })
 
   it('requestMicrophonePermission uses PermissionsAndroid (not the native hook) on Android', async () => {

@@ -33,7 +33,15 @@ the full plan and locked decisions.
 - [ ] `onTranscript` fires end-to-end on device (USER to test on phone)
 
 ## Phase C — Speaking pipeline (TTS)
-- [ ] Sherpa TTS plays through Android speaker; `onStateChange` transitions
+- [x] Reverse-engineered Sherpa TTS load API from the extension source:
+      `ttsNode` `loadModel` action takes `{ modelPath, tokensPath, dataPath }`
+      (Android auto-resolver uses cwd → unusable, so explicit load required)
+- [x] Provisioning: `download-android-models.js` fetches `en_GB.zip` into assets;
+      `EdgeSpeechModelsModule.prepareArchive()` unzips it to filesDir on first run
+- [x] `VoiceEngine.ensureAndroidTtsModel()` loads the voice via `loadModel` lazily
+      on first `speak()` (Android); iOS auto-loads framework voice. 84 tests pass
+- [ ] Sherpa TTS plays through Android speaker on device; `onStateChange` transitions
+- [ ] (optional) bundle de_DE voice too (currently en_GB only in the example)
 
 ## Phase D — Barge-in / AEC
 - [ ] Wire `enableCommunicationRoute`/`disableCommunicationRoute` lifecycle calls
