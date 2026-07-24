@@ -167,9 +167,17 @@ describe('VoiceEngine transport', () => {
 describe('VoiceEngine Android platform branches', () => {
   const RN = require('react-native')
   const originalOS = RN.Platform.OS
+  const ANDROID_MODEL_PATH = '/data/user/0/app/files/models/whisper/ggml-base.en.bin'
+  let prepareModel: jest.Mock
+
+  beforeEach(() => {
+    prepareModel = jest.fn().mockResolvedValue(ANDROID_MODEL_PATH)
+    RN.NativeModules.EdgeSpeechModels = { prepareModel }
+  })
 
   afterEach(() => {
     RN.Platform.OS = originalOS
+    delete RN.NativeModules.EdgeSpeechModels
     jest.restoreAllMocks()
   })
 
@@ -182,6 +190,47 @@ describe('VoiceEngine Android platform branches', () => {
     const create = findAction('createEngine')!
     const sttNode = create.params.params.config.graph.nodes.find((n: any) => n.id === 'sttNode')
     expect(sttNode.config.useGPU).toBe(false)
+  })
+
+  it('calls loadModel on the Whisper node with the resolved path on Android', async () => {
+    RN.Platform.OS = 'android'
+    voiceEngine.initialize('app-id', 'app-secret')
+    await voiceEngine.listen()
+
+    expect(prepareModel).toHaveBeenCalledWith('models/whisper/ggml-base.en.bin')
+    const load = findAction('loadModel')!
+    expect(load.params.objectURI).toBe('sttNode')
+    expect(load.params.params.modelPath).toBe(ANDROID_MODEL_PATH)
+    // The path is loaded via the action, not baked into the graph node config.
+    const create = findAction('createEngine')!
+    const sttNode = create.params.params.config.graph.nodes.find((n: any) => n.id === 'sttNode')
+    expect(sttNode.config.modelPath).toBeUndefined()
+  })
+
+  it('selects the tiny model asset when sttModel is whisper-tiny-en', async () => {
+    RN.Platform.OS = 'android'
+    voiceEngine.initialize('app-id', 'app-secret')
+    voiceEngine.configure({ sttModel: 'whisper-tiny-en' })
+    await voiceEngine.listen()
+
+    expect(prepareModel).toHaveBeenCalledWith('models/whisper/ggml-tiny.en.bin')
+  })
+
+  it('surfaces MODEL_UNAVAILABLE when the native models module is missing', async () => {
+    RN.Platform.OS = 'android'
+    delete RN.NativeModules.EdgeSpeechModels
+    voiceEngine.initialize('app-id', 'app-secret')
+
+    await expect(voiceEngine.listen()).rejects.toThrow(/EdgeSpeechModels native module/i)
+  })
+
+  it('does not call loadModel on iOS (model bundled in the SDK framework)', async () => {
+    RN.Platform.OS = 'ios'
+    voiceEngine.initialize('app-id', 'app-secret')
+    await voiceEngine.listen()
+
+    expect(prepareModel).not.toHaveBeenCalled()
+    expect(findAction('loadModel')).toBeUndefined()
   })
 
   it('requestMicrophonePermission uses PermissionsAndroid (not the native hook) on Android', async () => {

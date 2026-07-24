@@ -1,4 +1,4 @@
-import { Platform, PermissionsAndroid } from 'react-native'
+import { Platform, PermissionsAndroid, NativeModules } from 'react-native'
 import NativeEdgeSpeech from './NativeEdgeSpeech'
 import { NativeModuleRPCClient } from './NativeModuleRPCClient'
 import { SwitchboardClient } from './SwitchboardClient'
@@ -34,6 +34,18 @@ interface VoiceEngineConfig {
   sampleRate: number
   bufferSize: number
   ttsVoice: string
+  sttModel: string
+}
+
+/**
+ * Android bundles the Whisper ggml models under the app's assets (placed there by
+ * `scripts/download-android-models.js`); the STT node loads them from an absolute
+ * file path. Maps the public `sttModel` id to its bundled asset path. iOS ignores
+ * this — the model ships inside the SDK framework.
+ */
+const ANDROID_MODEL_ASSETS: Record<string, string> = {
+  'whisper-base-en': 'models/whisper/ggml-base.en.bin',
+  'whisper-tiny-en': 'models/whisper/ggml-tiny.en.bin',
 }
 
 /**
@@ -59,7 +71,11 @@ class VoiceEngine {
     sampleRate: 16000,
     bufferSize: 512,
     ttsVoice: 'en_GB',
+    sttModel: 'whisper-base-en',
   }
+
+  /** Resolved absolute path to the Whisper model on Android (see ensureAndroidModel). */
+  private androidModelPath: string | null = null
 
   private readonly listeners = new Map<EdgeSpeechEventName, Set<Listener>>()
 
@@ -131,6 +147,47 @@ class VoiceEngine {
     if (typeof config.ttsVoice === 'string') {
       this.config.ttsVoice = config.ttsVoice
     }
+    if (typeof config.sttModel === 'string' && config.sttModel.trim() !== '') {
+      if (config.sttModel !== this.config.sttModel) {
+        this.config.sttModel = config.sttModel
+        // Force the Android model path to re-resolve for the new model on next listen.
+        this.androidModelPath = null
+      }
+    }
+  }
+
+  /**
+   * On Android the Whisper node needs an absolute `modelPath` (iOS uses the model
+   * bundled in the SDK framework). Copy the bundled asset to filesDir on first use
+   * (via the EdgeSpeechModels native module) and cache the resolved path. No-op on
+   * iOS and after the path is resolved.
+   */
+  private async ensureAndroidModel(): Promise<void> {
+    if (Platform.OS !== 'android' || this.androidModelPath) {
+      return
+    }
+    const assetPath = ANDROID_MODEL_ASSETS[this.config.sttModel]
+    if (!assetPath) {
+      throw this.makeError(
+        'MODEL_UNAVAILABLE',
+        `Unknown sttModel '${this.config.sttModel}' on Android. Bundle it and add it to ANDROID_MODEL_ASSETS.`
+      )
+    }
+    const models = NativeModules.EdgeSpeechModels
+    if (!models?.prepareModel) {
+      throw this.makeError(
+        'MODEL_UNAVAILABLE',
+        'EdgeSpeechModels native module is unavailable — cannot resolve the Whisper model path on Android.'
+      )
+    }
+    try {
+      this.androidModelPath = await models.prepareModel(assetPath)
+    } catch (e) {
+      throw this.makeError(
+        'MODEL_LOAD_FAILED',
+        `Failed to prepare Whisper model '${assetPath}': ${(e as Error)?.message ?? String(e)}`
+      )
+    }
   }
 
   // MARK: - Control
@@ -139,6 +196,7 @@ class VoiceEngine {
     if (!this.isInitialized) {
       throw this.makeError('NOT_INITIALIZED', 'Switchboard SDK not initialized. Call initialize() first.')
     }
+    await this.ensureAndroidModel()
     if (!this.engineId) {
       this.createEngine()
     }
@@ -173,6 +231,7 @@ class VoiceEngine {
     if (!text) {
       return
     }
+    await this.ensureAndroidModel()
     if (!this.engineId) {
       this.createEngine()
     }
@@ -241,6 +300,26 @@ class VoiceEngine {
     // with one combined engine this keeps AEC active during TTS playback and
     // prevents self-triggered barge-in.
     client.setValue(this.engineId, 'voiceProcessingEnabled', true)
+
+    // The Whisper node must have a model loaded before it can transcribe. iOS
+    // auto-loads the model bundled inside the SDK framework; Android ships no
+    // bundled model, so load the ggml model that ensureAndroidModel() copied to
+    // disk, by its absolute path.
+    if (Platform.OS === 'android') {
+      if (!this.androidModelPath) {
+        throw this.makeError(
+          'MODEL_UNAVAILABLE',
+          'Whisper model path was not resolved before engine creation (call listen()/speak()).'
+        )
+      }
+      const loadRes = client.callAction('sttNode', 'loadModel', {
+        modelPath: this.androidModelPath,
+        useGPU: false,
+      })
+      if (loadRes.error) {
+        throw this.makeError('MODEL_LOAD_FAILED', `Whisper loadModel failed: ${loadRes.error.message}`)
+      }
+    }
   }
 
   private destroyEngine(): void {
@@ -292,7 +371,7 @@ class VoiceEngine {
             {
               id: 'sttNode',
               type: 'Whisper.STT',
-              config: { initializeModel: true, useGPU },
+              config: { useGPU },
             },
             { id: 'ttsNode', type: 'Sherpa.TTS' },
             { id: 'monoToMultiChannelNode', type: 'MonoToMultiChannel' },
@@ -426,7 +505,14 @@ class VoiceEngine {
     this.isListening = false
     this.isSpeaking = false
     this.eventsWired = false
-    this.config = { vadSensitivity: 0.5, sampleRate: 16000, bufferSize: 512, ttsVoice: 'en_GB' }
+    this.androidModelPath = null
+    this.config = {
+      vadSensitivity: 0.5,
+      sampleRate: 16000,
+      bufferSize: 512,
+      ttsVoice: 'en_GB',
+      sttModel: 'whisper-base-en',
+    }
   }
 }
 

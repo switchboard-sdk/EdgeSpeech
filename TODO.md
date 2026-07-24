@@ -22,7 +22,14 @@ the full plan and locked decisions.
 - [x] Android-branch unit tests (useGPU + permission), 77 tests pass, tsc + eslint clean
 - [x] `dist/` rebuilt with Android branches
 - [x] Example buildable for device: x86 excluded (durable) + NDK r29 pinned (app module)
-- [ ] Confirm Whisper model provisioning on Android (during device test)
+- [x] Confirmed model provisioning: AARs ship NO model (iOS bundles in xcframework);
+      Whisper.STT loads from absolute `modelPath` (verified in the .so strings)
+- [x] Model provisioning implemented (bundle-via-script; both base+tiny):
+      `scripts/download-android-models.js`, `EdgeSpeechModelsModule.kt` (asset→filesDir)
+- [x] Whisper loads via `loadModel` action (param `modelPath`), Android-only, in
+      `createEngine()` — verified from .so; no `initializeModel` key exists; iOS
+      auto-loads its bundled model (untouched). 81 tests pass, tsc/eslint clean
+- [x] Models downloaded into example assets; app build sets `noCompress += ['bin']`
 - [ ] `onTranscript` fires end-to-end on device (USER to test on phone)
 
 ## Phase C — Speaking pipeline (TTS)

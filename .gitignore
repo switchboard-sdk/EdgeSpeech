@@ -22,3 +22,7 @@ PROGRESS.md
 
 # Claude Code internal memory
 memory/
+
+# Downloaded on-device Whisper models (large; fetch via scripts/download-android-models.js)
+**/assets/models/
+ggml-*.bin
