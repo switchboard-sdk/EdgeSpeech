@@ -37,23 +37,14 @@ interface VoiceEngineConfig {
   sttModel: string
 }
 
-/**
- * Android bundles the Whisper ggml models under the app's assets (placed there by
- * `scripts/download-android-models.js`); the STT node loads them from an absolute
- * file path. Maps the public `sttModel` id to its bundled asset path. iOS ignores
- * this — the model ships inside the SDK framework.
- */
+// Maps `sttModel` → bundled asset path (Android; iOS uses the SDK-framework model).
 const ANDROID_MODEL_ASSETS: Record<string, string> = {
   'whisper-base-en': 'models/whisper/ggml-base.en.bin',
   'whisper-tiny-en': 'models/whisper/ggml-tiny.en.bin',
 }
 
-/**
- * Android Sherpa TTS voices, keyed by `ttsVoice`: the bundled zip asset plus the
- * paths inside it. The zip is extracted once to `filesDir/<ANDROID_TTS_EXTRACT_DIR>`
- * and the TTS node's `loadModel` action gets the model / tokens / espeak-data
- * paths. iOS uses the voices bundled in the SDK framework.
- */
+// Android Sherpa TTS voices keyed by `ttsVoice`: bundled zip + in-zip paths.
+// Extracted to filesDir once; iOS uses the SDK-framework voices.
 const ANDROID_TTS_VOICES: Record<
   string,
   { zipAsset: string; voiceDir: string; modelFile: string }
@@ -183,12 +174,7 @@ class VoiceEngine {
     }
   }
 
-  /**
-   * On Android the Whisper node needs an absolute `modelPath` (iOS uses the model
-   * bundled in the SDK framework). Copy the bundled asset to filesDir on first use
-   * (via the EdgeSpeechModels native module) and cache the resolved path. No-op on
-   * iOS and after the path is resolved.
-   */
+  /** Android: copy the Whisper model asset to filesDir (once) and cache its path. iOS no-op (bundled). */
   private async ensureAndroidModel(): Promise<void> {
     if (Platform.OS !== 'android' || this.androidModelPath) {
       return
@@ -217,12 +203,7 @@ class VoiceEngine {
     }
   }
 
-  /**
-   * Load the Sherpa TTS voice into the ttsNode on Android (iOS auto-loads the
-   * framework-bundled voice). The voice zip is extracted to filesDir once, then
-   * the node's `loadModel` action is called with the model / tokens / espeak-data
-   * paths. No-op on iOS and once loaded.
-   */
+  /** Android: extract the TTS voice to filesDir (once) and load it into ttsNode via `loadModel`. iOS no-op (bundled). */
   private async ensureAndroidTtsModel(): Promise<void> {
     if (Platform.OS !== 'android' || this.androidTtsLoaded) {
       return
@@ -339,9 +320,7 @@ class VoiceEngine {
   }
 
   async requestMicrophonePermission(): Promise<boolean> {
-    // On Android the native C++ mic hook is not installed (it's iOS-only), so
-    // request the RECORD_AUDIO runtime permission from JS. iOS goes through the
-    // native provider hook (AVAudioApplication/AVAudioSession).
+    // Android: request RECORD_AUDIO from JS (the native mic hook is iOS-only).
     const granted =
       Platform.OS === 'android'
         ? (await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.RECORD_AUDIO)) ===
@@ -375,10 +354,7 @@ class VoiceEngine {
     // prevents self-triggered barge-in.
     client.setValue(this.engineId, 'voiceProcessingEnabled', true)
 
-    // The Whisper node must have a model loaded before it can transcribe. iOS
-    // auto-loads the model bundled inside the SDK framework; Android ships no
-    // bundled model, so load the ggml model that ensureAndroidModel() copied to
-    // disk, by its absolute path.
+    // Android: load the Whisper model by path (iOS auto-loads its bundled model).
     if (Platform.OS === 'android') {
       if (!this.androidModelPath) {
         throw this.makeError(
@@ -417,9 +393,7 @@ class VoiceEngine {
    *   data: vadNode.speechEnded → sttNode.transcribe
    */
   private buildGraphConfig(): object {
-    // Whisper's Metal GPU path crashes in the iOS Simulator, so gate on it.
-    // Android has no Metal backend — run Whisper on CPU there (revisit for a
-    // Vulkan/OpenCL path later).
+    // GPU off in the iOS Simulator (Metal crash) and on Android (no Metal; CPU only).
     const useGPU = Platform.OS !== 'android' && !NativeEdgeSpeech.isSimulator()
 
     return {

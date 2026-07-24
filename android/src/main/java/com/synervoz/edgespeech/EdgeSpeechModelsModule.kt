@@ -9,25 +9,16 @@ import java.io.File
 import java.util.zip.ZipInputStream
 
 /**
- * Materializes bundled model assets to a real filesystem path.
- *
- * The Switchboard Whisper (and Sherpa) nodes load models from an absolute file
- * path — and whisper.cpp cannot read from inside the APK's `assets/`. The models
- * are bundled into `assets/` by `scripts/download-android-models.js`; this module
- * copies the requested asset into the app's filesDir on first use and returns its
- * absolute path, which `VoiceEngine.ts` injects into the STT node's `modelPath`.
- * Android-only — on iOS the models ship inside the SDK framework.
+ * Materializes bundled model assets to a real filesDir path — the Switchboard
+ * nodes load models by file path and can't read inside the APK's `assets/`.
+ * Android-only; iOS ships models in the SDK framework.
  */
 class EdgeSpeechModelsModule(private val reactContext: ReactApplicationContext) :
   ReactContextBaseJavaModule(reactContext) {
 
   override fun getName() = NAME
 
-  /**
-   * Ensure the asset at [assetPath] exists on disk under filesDir and resolve its
-   * absolute path. Copies only when missing or a different size, so the ~141 MB
-   * base model is not rewritten on every launch.
-   */
+  /** Copy asset [assetPath] to filesDir (only if missing/size-changed) and resolve its path. */
   @ReactMethod
   fun prepareModel(assetPath: String, promise: Promise) {
     try {
@@ -62,12 +53,7 @@ class EdgeSpeechModelsModule(private val reactContext: ReactApplicationContext) 
     }
   }
 
-  /**
-   * Extract the zip bundled at assets/[assetZipPath] into filesDir/[destSubdir]
-   * and resolve that directory's absolute path. Used for multi-file models like
-   * the Sherpa TTS voice (model + tokens + espeak-ng-data). Extracts once —
-   * a `.extracted` marker short-circuits subsequent calls.
-   */
+  /** Extract zip asset [assetZipPath] into filesDir/[destSubdir] once (`.extracted` marker); resolve that dir. Used for multi-file models (Sherpa TTS voice). */
   @ReactMethod
   fun prepareArchive(assetZipPath: String, destSubdir: String, promise: Promise) {
     try {

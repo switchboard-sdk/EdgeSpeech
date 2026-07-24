@@ -11,10 +11,8 @@ import com.facebook.react.module.model.ReactModuleInfoProvider
  * autolinking, not the JVM). This package still has to exist so autolinking
  * recognizes the directory as an Android library — otherwise the CLI drops the
  * android config and its Switchboard Maven/Prefab wiring. It also registers the
- * JVM modules we need: [EdgeSpeechAudioSessionModule] (AudioManager routing for
- * speakerphone + hardware AEC, required for reliable barge-in) and
- * [EdgeSpeechModelsModule] (copies bundled model assets to a real file path for
- * the STT node).
+ * JVM modules: [EdgeSpeechAudioSessionModule] (AudioManager routing for AEC/barge-in)
+ * and [EdgeSpeechModelsModule] (materializes model assets to filesDir).
  */
 class EdgeSpeechPackage : BaseReactPackage() {
   override fun getModule(name: String, reactContext: ReactApplicationContext): NativeModule? =

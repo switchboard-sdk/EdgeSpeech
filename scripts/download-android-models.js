@@ -1,24 +1,12 @@
 #!/usr/bin/env node
 /**
- * Download the on-device models into the Android app's assets.
+ * Download the on-device models into the Android app's assets (Android AARs ship
+ * no models; the nodes load them by file path at runtime). Places Whisper models
+ * under assets/models/whisper/ and the Sherpa TTS voice zip under
+ * assets/models/sherpa/tts/. Idempotent. Re-run after `expo prebuild --clean`.
  *
- * Unlike iOS (where models are bundled inside the SDK xcframeworks), the Android
- * AARs ship no models — the Whisper node loads a ggml model from an absolute
- * `modelPath`, and the Sherpa TTS node loads from absolute `modelPath` /
- * `tokensPath` / `dataPath`. So the app ships the models in its assets and the
- * EdgeSpeech native layer (EdgeSpeechModelsModule) materializes them onto disk
- * (filesDir) on first run, then hands the paths to the nodes' `loadModel` action.
- *
- * This places:
- *   - Whisper ggml models under assets/models/whisper/
- *   - the Sherpa TTS voice zip under assets/models/sherpa/tts/
- * so they are packaged into the APK. Idempotent (skips a file already present at
- * the right size). Re-run after `expo prebuild --clean` (which regenerates android/).
- *
- * Usage:
- *   node scripts/download-android-models.js [assetsRootDir]
- * Default assetsRootDir:
- *   example/android/app/src/main/assets
+ * Usage: node scripts/download-android-models.js [assetsRootDir]
+ *   (default: example/android/app/src/main/assets)
  */
 const fs = require('fs')
 const path = require('path')
