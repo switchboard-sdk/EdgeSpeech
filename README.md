@@ -80,6 +80,81 @@ npx expo run:ios
 > scripts (e.g. npm 11+), run it once manually:
 > `node node_modules/@synervoz/edgespeech/scripts/postinstall.js`.
 
+### Android Setup
+
+> [!NOTE]
+> Android support is in progress. `RECORD_AUDIO` is declared by the library and merged into your app automatically (requested at runtime via `requestMicrophonePermission()`). The on-device models (Whisper + the Sherpa TTS voice) are **not** bundled in the package — download them into your app's assets before building (step below).
+
+Follow **one** path depending on your app.
+
+#### Expo
+
+**1. Enable the New Architecture** — `"newArchEnabled": true` in `app.json` (default in recent Expo SDKs).
+
+**2. Add the Switchboard Maven repo + set ABIs** via [`expo-build-properties`](https://docs.expo.dev/versions/latest/sdk/build-properties/) in `app.json`. The repo must be declared here (not left to the library) because `expo run:android` builds with `--configure-on-demand`, under which the library's own repo injection runs too late. `buildArchs` drops 32-bit `x86` — the AARs ship `arm64-v8a`/`armeabi-v7a`/`x86_64` only:
+
+```json
+{
+  "plugins": [
+    ["expo-build-properties", {
+      "android": {
+        "extraMavenRepos": ["https://s3.amazonaws.com/synervoz-android-maven-repository"],
+        "buildArchs": ["armeabi-v7a", "arm64-v8a", "x86_64"]
+      }
+    }]
+  ]
+}
+```
+
+**3. Download the models** (after the `android/` project exists):
+
+```bash
+npx expo prebuild -p android
+node node_modules/@synervoz/edgespeech/scripts/download-android-models.js android/app/src/main/assets
+```
+
+**4. Build:**
+
+```bash
+npx expo run:android
+```
+
+> [!NOTE]
+> If the app crashes at launch with a `dlopen` / `UnsatisfiedLinkError`, pin **NDK r29**. `expo-build-properties` has no `ndkVersion` option, so set `android.ndkVersion "29.0.14206865"` in `android/app/build.gradle` (or a small config plugin), and install it: `sdkmanager --install "ndk;29.0.14206865"`.
+
+#### Bare React Native
+
+**1. Enable the New Architecture** — the default from RN 0.76+.
+
+**2. Switchboard Maven repo — nothing to add.** The library injects it into your Gradle build automatically (bare-RN autolinking configures the library before `:app` resolves). Only if your app opts into settings-level resolution (`dependencyResolutionManagement { repositoriesMode = FAIL_ON_PROJECT_REPOS }`) or builds with `--configure-on-demand`, declare it yourself in `android/build.gradle`:
+
+```gradle
+allprojects {
+  repositories { maven { url 'https://s3.amazonaws.com/synervoz-android-maven-repository' } }
+}
+```
+
+**3. Exclude 32-bit `x86`** in `android/gradle.properties` (the AARs ship `arm64-v8a`/`armeabi-v7a`/`x86_64` only):
+
+```
+reactNativeArchitectures=armeabi-v7a,arm64-v8a,x86_64
+```
+
+**4. Download the models:**
+
+```bash
+node node_modules/@synervoz/edgespeech/scripts/download-android-models.js android/app/src/main/assets
+```
+
+**5. Build:**
+
+```bash
+npx react-native run-android
+```
+
+> [!NOTE]
+> If the app crashes at launch with a `dlopen` / `UnsatisfiedLinkError`, pin **NDK r29**: set `android.ndkVersion "29.0.14206865"` in `android/app/build.gradle` and install it: `sdkmanager --install "ndk;29.0.14206865"`.
+
 ## API Reference
 
 The `useEdgeSpeech` hook provides access to the main functions of the Switchboard SDK.
