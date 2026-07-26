@@ -95,6 +95,9 @@ class VoiceEngine {
   /** Whether the Sherpa TTS voice has been loaded into the ttsNode (Android). */
   private androidTtsLoaded = false
 
+  /** Pending Kotlin SDK init on Android; awaited before the engine is created. */
+  private androidInitPromise: Promise<void> | null = null
+
   private readonly listeners = new Map<EdgeSpeechEventName, Set<Listener>>()
 
   // MARK: - Public listener API (mirrors the old Expo NativeModule.addListener)
@@ -125,6 +128,16 @@ class VoiceEngine {
     const client = this.ensureClient()
     this.wireEvents()
 
+    if (Platform.OS === 'android') {
+      // Android initializes the SDK through Kotlin (Switchboard.initialize) so the
+      // SDK registers its PlatformInfoProvider — Whisper needs the native-lib dir it
+      // exposes to load its ggml backends. Everything else stays on the C++ channel;
+      // listen()/speak() await this before creating the engine.
+      this.androidInitPromise = this.initializeAndroidSdk(appId, appSecret)
+      this.isInitialized = true
+      return
+    }
+
     const res = client.callAction('switchboard', 'initialize', {
       appID: appId,
       appSecret,
@@ -152,6 +165,28 @@ class VoiceEngine {
     this.isInitialized = true
   }
 
+  /**
+   * Initialize the SDK via the Kotlin module on Android (registers the
+   * PlatformInfoProvider so Whisper can find its ggml backends). Never rejects —
+   * genuine failures surface via onError; "already initialized" (reload) is success.
+   */
+  private async initializeAndroidSdk(appId: string, appSecret: string): Promise<void> {
+    const models = NativeModules.EdgeSpeechModels
+    if (!models?.initializeSdk) {
+      this.emitError('INIT_FAILED', 'EdgeSpeechModels native module is unavailable.')
+      return
+    }
+    try {
+      await models.initializeSdk(appId, appSecret, JSON.stringify(EXTENSIONS))
+    } catch (e) {
+      const message = (e as Error)?.message ?? String(e)
+      if (/already.*initialized/i.test(message)) {
+        return
+      }
+      this.emitError('INIT_FAILED', message)
+    }
+  }
+
   configure(config: Record<string, unknown>): void {
     if (typeof config.vadSensitivity === 'number') {
       this.config.vadSensitivity = Math.max(0, Math.min(1, config.vadSensitivity))
@@ -176,7 +211,13 @@ class VoiceEngine {
 
   /** Android: copy the Whisper model asset to filesDir (once) and cache its path. iOS no-op (bundled). */
   private async ensureAndroidModel(): Promise<void> {
-    if (Platform.OS !== 'android' || this.androidModelPath) {
+    if (Platform.OS !== 'android') {
+      return
+    }
+    // Wait for the Kotlin SDK init (registers the native-lib dir) before the engine
+    // is created / the Whisper model is loaded.
+    await this.androidInitPromise
+    if (this.androidModelPath) {
       return
     }
     const assetPath = ANDROID_MODEL_ASSETS[this.config.sttModel]
@@ -557,6 +598,7 @@ class VoiceEngine {
     this.eventsWired = false
     this.androidModelPath = null
     this.androidTtsLoaded = false
+    this.androidInitPromise = null
     this.config = {
       vadSensitivity: 0.5,
       sampleRate: 16000,
