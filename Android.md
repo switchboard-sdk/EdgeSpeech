@@ -380,3 +380,136 @@ version.
 - Whisper GPU acceleration on Android (Vulkan/OpenCL) — deferred (decision #2).
 - Bumping the SDK to 3.2.4 on either platform — separate change (decision #1).
 - Any change to the iOS build, the JSON-RPC protocol, or the public JS API.
+
+---
+
+## 13. App-side configuration reference (Expo vs Bare RN)
+
+Verified during on-device bring-up (Samsung SM-G780G). This supersedes the
+"likely r29 / may be required" hedging in §7–§8 — every item below is confirmed.
+
+EdgeSpeech is a **C++ TurboModule** that autolinks into either an Expo or a bare
+React Native app; it does **not** use the Expo Modules API. Autolinking makes the
+library a **Gradle subproject of the consuming app's build**, and the C++ compiles
+in the *app's* native build (Prefab-linking the Switchboard AARs) — so the app, not
+the library, must be able to resolve and package those native deps.
+
+### Ownership principle
+
+The split follows a standards-based line (not "force everything from the library"):
+
+- **The library owns its dependency source of truth** — the Switchboard Maven repo
+  URL and the setup instructions live in the library/README. On bare RN the library
+  injects it automatically; on Expo the app declares it in one documented line
+  (transparent, and what Expo's docs recommend — see the decision below).
+- **The app owns its build toolchain** — NDK version, target ABIs, packaging. A
+  library imposes *requirements* on these, but it should **document** them, not seize
+  them. Silently pinning a consumer's NDK or restricting their ABIs can conflict with
+  their other native deps. This is exactly what `expo-build-properties` is for.
+
+We deliberately do **not** force NDK / ABIs / packaging from a library config plugin
+— that's beyond ecosystem norms; libraries in this position document toolchain
+requirements rather than override them.
+
+### What the library owns (no app action needed)
+
+- **C++ TurboModule compile + Prefab link wiring** (`react-native.config.js`
+  `cxxModule*` keys + `android/CMakeLists.txt`).
+- **`RECORD_AUDIO` + `MODIFY_AUDIO_SETTINGS`** — declared in the library manifest,
+  merged into every app. Request `RECORD_AUDIO` at runtime via
+  `requestMicrophonePermission()`; nothing to declare app-side.
+- **Switchboard Maven repo — bare RN only.** The `rootProject.allprojects` injection
+  in the library's `android/build.gradle` reaches the consumer (bare RN doesn't use
+  `--configure-on-demand`, and RN's default repo mode honors project repositories). No
+  app step. *(Verified on Expo; bare RN is "should work," untested in this repo.)* On
+  **Expo** the app declares the repo instead — see the table and decision below.
+
+### App-side settings (the app's own build config)
+
+Each row shows how the **app** satisfies a requirement the library imposes.
+
+| Setting | Required? | **Expo** | **Bare RN** (committed `android/`) |
+|---|---|---|---|
+| New Architecture | hard | `newArchEnabled: true` in `app.json` (default) | `newArchEnabled=true` in `gradle.properties` (default RN 0.76+) |
+| Switchboard Maven repo | hard | `expo-build-properties` → `extraMavenRepos` (one line, folds into the EBP block; see decision) | **nothing** — autolink injects it, unless the app uses `FAIL_ON_PROJECT_REPOS` → declare in `android/build.gradle` |
+| `useLegacyPackaging` / `extractNativeLibs` | hard (`ggml_abort` — Whisper `dlopen`s its ggml CPU backends off disk) | `expo-build-properties` → `useLegacyPackaging: true` | `packagingOptions { jniLibs { useLegacyPackaging true } }` in `app/build.gradle` |
+| Drop 32-bit `x86` | hard (AARs ship `arm64-v8a`/`armeabi-v7a`/`x86_64` only) | `expo-build-properties` → `buildArchs` | `reactNativeArchitectures=armeabi-v7a,arm64-v8a,x86_64` in `gradle.properties` |
+| NDK r29 (`29.0.14206865`) | hard (`dlopen` fails at launch — the prebuilt `.so` needs `__cxa_init_primary_exception`, absent from the r27 default) | **small app-side config plugin** (`expo-build-properties` has no `ndkVersion` key) + `sdkmanager --install "ndk;29.0.14206865"` | `ndkVersion "29.0.14206865"` in `app/build.gradle` + `sdkmanager` install |
+| `noCompress += ['bin']` | optional (cheaper filesDir copy + reliable `openFd` size-check; copy still works without it) | same small app-side config plugin | `androidResources { noCompress += ['bin'] }` in `app/build.gradle` |
+| Models into `assets/` | hard (not bundled in the AARs — iOS bakes them into the xcframeworks) | `download-android-models.js` → `android/app/src/main/assets` (run **after** `expo prebuild`) | `download-android-models.js` → `android/app/src/main/assets` |
+| Mic permission | hard | **nothing to declare** (library merges); request at runtime | **nothing to declare** (library merges); request at runtime |
+
+### Things to notice across the bases
+
+1. **Bare RN's surface is simplest** — no plugins anywhere: the repo comes free from
+   autolinking, and a few committed edits to `gradle.properties` + `app/build.gradle`
+   cover the rest.
+2. **The only Expo-specific custom code is the app-side NDK plugin.** It exists purely
+   because `prebuild` wipes manual `android/` edits and `expo-build-properties` has no
+   `ndkVersion` / `noCompress` key. It's *app-owned* (in `example/plugins/`), tiny, and
+   touches only what has no declarative path — the app pinning its own toolchain.
+3. **Everything else on Expo is declarative** via `expo-build-properties` (repo,
+   packaging, ABIs) — no library config plugin (see decision).
+
+### Concrete artifacts per base
+
+**Expo** (this repo's example) — `app.json`:
+
+```json
+"plugins": [
+  ["expo-build-properties", {
+    "android": {
+      "extraMavenRepos": ["https://s3.amazonaws.com/synervoz-android-maven-repository"],
+      "useLegacyPackaging": true,
+      "buildArchs": ["armeabi-v7a", "arm64-v8a", "x86_64"]
+    }
+  }],
+  "./plugins/withEdgeSpeechNdk"    // app-owned → ndkVersion + noCompress
+]
+```
+
+Plus `expo-build-properties` in `package.json` and the model-download step. Because
+Expo regenerates `android/` on every `prebuild`, all of this must live in `app.json` /
+the plugin to be clean-clone reproducible (this is the "durable Android config" task).
+
+**Bare RN** (documented in the README; no bare example shipped) — committed edits:
+
+```gradle
+// android/gradle.properties
+reactNativeArchitectures=armeabi-v7a,arm64-v8a,x86_64
+
+// android/app/build.gradle → android { }
+ndkVersion "29.0.14206865"
+packagingOptions { jniLibs { useLegacyPackaging true } }
+androidResources { noCompress += ['bin'] }
+// Maven repo: nothing (autolinked) unless the app uses FAIL_ON_PROJECT_REPOS
+```
+
+Plus `sdkmanager --install "ndk;29.0.14206865"` and the model-download step.
+
+### Decision — Maven repo on Expo: declare `extraMavenRepos` (no library config plugin)
+
+We considered shipping a library Expo config plugin
+(`@synervoz/edgespeech/app.plugin.js`) to inject the repo, and **rejected it** in
+favour of documenting `extraMavenRepos`. Rationale:
+
+- **No net simplification for the consumer.** They already need an
+  `expo-build-properties` block (for `useLegacyPackaging` + `buildArchs`); the repo is
+  one more key in it. A library plugin would instead add a *separate* `plugins`
+  entry — same or more surface, just relocating the URL.
+- **Cost to the library.** A maintained `app.plugin.js` + an `@expo/config-plugins`
+  dependency + compat risk across Expo SDK versions — all to move a single stable URL.
+- **Transparency.** An explicit `extraMavenRepos` line is visible to the consumer and
+  compatible with `FAIL_ON_PROJECT_REPOS` setups; silently injecting a remote repo is
+  what those setups guard against. Expo's docs recommend documenting the repo for
+  libraries with custom dependencies.
+- **A config plugin earns its keep for *many/complex* native edits** (permissions +
+  entitlements + manifest + gradle deps). One repo URL doesn't clear that bar — and we
+  deliberately removed the things that would have (forcing NDK/ABIs/packaging).
+
+Bare RN is unchanged (autolink injection). The `withEdgeSpeechNdk` app-side plugin is
+unaffected — it's the app pinning its own toolchain, the one thing with no declarative
+path on Expo.
+
+The example app in this repo is the **Expo** column; the bare-RN column is what a
+README-following consumer does — this repo ships no bare-RN example.
