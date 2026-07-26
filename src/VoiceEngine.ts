@@ -129,10 +129,8 @@ class VoiceEngine {
     this.wireEvents()
 
     if (Platform.OS === 'android') {
-      // Android initializes the SDK through Kotlin (Switchboard.initialize) so the
-      // SDK registers its PlatformInfoProvider — Whisper needs the native-lib dir it
-      // exposes to load its ggml backends. Everything else stays on the C++ channel;
-      // listen()/speak() await this before creating the engine.
+      // Android inits via Kotlin (registers the PlatformInfoProvider → native-lib
+      // dir Whisper needs); listen()/speak() await it before creating the engine.
       this.androidInitPromise = this.initializeAndroidSdk(appId, appSecret)
       this.isInitialized = true
       return
@@ -165,11 +163,7 @@ class VoiceEngine {
     this.isInitialized = true
   }
 
-  /**
-   * Initialize the SDK via the Kotlin module on Android (registers the
-   * PlatformInfoProvider so Whisper can find its ggml backends). Never rejects —
-   * genuine failures surface via onError; "already initialized" (reload) is success.
-   */
+  /** Android SDK init via Kotlin. Never rejects — failures go to onError; reload is success. */
   private async initializeAndroidSdk(appId: string, appSecret: string): Promise<void> {
     const models = NativeModules.EdgeSpeechModels
     if (!models?.initializeSdk) {
@@ -214,8 +208,7 @@ class VoiceEngine {
     if (Platform.OS !== 'android') {
       return
     }
-    // Wait for the Kotlin SDK init (registers the native-lib dir) before the engine
-    // is created / the Whisper model is loaded.
+    // Kotlin SDK init must finish before the engine is created.
     await this.androidInitPromise
     if (this.androidModelPath) {
       return

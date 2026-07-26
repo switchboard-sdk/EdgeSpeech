@@ -4,9 +4,11 @@ import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
+import com.synervoz.switchboard.sdk.Switchboard
 import java.io.BufferedInputStream
 import java.io.File
 import java.util.zip.ZipInputStream
+import org.json.JSONObject
 
 /**
  * Materializes bundled model assets to a real filesDir path — the Switchboard
@@ -17,6 +19,33 @@ class EdgeSpeechModelsModule(private val reactContext: ReactApplicationContext) 
   ReactContextBaseJavaModule(reactContext) {
 
   override fun getName() = NAME
+
+  /**
+   * Init the SDK via Kotlin so it registers its PlatformInfoProvider from the Context
+   * — that's what gives Whisper the native-lib dir for its ggml backends (the C++
+   * JSON-RPC init has no Context). Requires extractNativeLibs=true.
+   */
+  @ReactMethod
+  fun initializeSdk(appId: String, appSecret: String, extensionsJson: String, promise: Promise) {
+    try {
+      val extObj = JSONObject(extensionsJson)
+      val extensions = HashMap<String, Any>()
+      val keys = extObj.keys()
+      while (keys.hasNext()) {
+        val key = keys.next()
+        extensions[key] = emptyMap<String, Any>()
+      }
+      val result = Switchboard.initialize(reactContext.applicationContext, appId, appSecret, extensions)
+      // Treat "already initialized" (JS bundle reloads) as success.
+      if (result.isSuccess || result.error?.contains("already", ignoreCase = true) == true) {
+        promise.resolve(null)
+      } else {
+        promise.reject("init_failed", result.error ?: "Switchboard SDK initialize failed")
+      }
+    } catch (t: Throwable) {
+      promise.reject("init_error", t.message, t)
+    }
+  }
 
   /** Copy asset [assetPath] to filesDir (only if missing/size-changed) and resolve its path. */
   @ReactMethod

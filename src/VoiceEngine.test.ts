@@ -171,6 +171,7 @@ describe('VoiceEngine Android platform branches', () => {
   const TTS_BASE = '/data/user/0/app/files/sherpa/tts'
   let prepareModel: jest.Mock
   let prepareArchive: jest.Mock
+  let initializeSdk: jest.Mock
 
   const ttsLoadCall = () =>
     sentCalls().find(
@@ -183,7 +184,8 @@ describe('VoiceEngine Android platform branches', () => {
   beforeEach(() => {
     prepareModel = jest.fn().mockResolvedValue(ANDROID_MODEL_PATH)
     prepareArchive = jest.fn().mockResolvedValue(TTS_BASE)
-    RN.NativeModules.EdgeSpeechModels = { prepareModel, prepareArchive }
+    initializeSdk = jest.fn().mockResolvedValue(null)
+    RN.NativeModules.EdgeSpeechModels = { prepareModel, prepareArchive, initializeSdk }
   })
 
   afterEach(() => {
