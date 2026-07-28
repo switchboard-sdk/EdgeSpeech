@@ -136,9 +136,6 @@ android {
 
 Then `npx react-native run-android`.
 
-> [!NOTE]
-> **NDK r29 is required** — the prebuilt Switchboard `.so` needs `__cxa_init_primary_exception`, absent from the r27 default, so `dlopen` fails at launch without it. Set `ndkVersion "29.0.14206865"` in `android/app/build.gradle`'s `android { }` block (step 4) and install it: `sdkmanager --install "ndk;29.0.14206865"`.
-
 ## API Reference
 
 The `useEdgeSpeech` hook provides access to the main functions of the Switchboard SDK.
