@@ -71,9 +71,12 @@ the full plan and locked decisions.
       `useExpoModules()`, settings.gradle:32 — correctly timed under
       `--configure-on-demand`, unlike the library's subproject injection). NDK is **not**
       auto-pinned by prebuild (documented manual edit, by design).
-- [ ] Final on-device confirmation: `npm install` (postinstall pulls ~290 MB of models
-      into library assets) → `expo run:android` (the EBP settings-scope repo injection is
-      proven wired, but AAR download + model asset-merge not yet exercised on device)
+- [x] On-device build/install confirmed (SM_G780G, clean caches → prebuild → NDK pin →
+      `expo run:android`): BUILD SUCCESSFUL, `app-debug.apk` installed. Verified in the APK:
+      all 3 models under `assets/models/…` (merged from library assets), Switchboard libs +
+      ggml CPU backends in `lib/arm64-v8a/`. Live-exercised: EBP Maven injection
+      (`Adding extra maven repository` at build), useLegacyPackaging, x86 dropped, NDK r29.
+- [ ] Interactive STT/TTS + mic-gate voice-loop check on device (needs Metro running)
 - [x] Auto-provision Android models via `postinstall` (like iOS frameworks) — downloads
       into the **library's** `android/src/main/assets/models/` (asset-merged into the APK,
       works Expo + bare RN); warn-don't-fail, `EDGESPEECH_SKIP_ANDROID_MODELS` opt-out.
