@@ -51,6 +51,11 @@ requirements rather than override them.
   `--configure-on-demand`, and RN's default repo mode honors project repositories). No
   app step. *(Verified on Expo; bare RN is "should work," untested in this repo.)* On
   **Expo** the app declares the repo instead — see the table and decision below.
+- **Android models** — the AARs ship none (iOS bakes them into the SDK frameworks), so
+  the library's `postinstall` downloads them (~290 MB: Whisper base + tiny, Sherpa
+  en_GB) into its own `android/src/main/assets/models/`; Android's asset-merge bundles
+  them into the app's APK. No app step; fallback `download-android-models.js` if install
+  scripts are gated; opt out with `EDGESPEECH_SKIP_ANDROID_MODELS`.
 
 ## App-side settings (the app's own build config)
 
@@ -62,9 +67,8 @@ Each row shows how the **app** satisfies a requirement the library imposes.
 | Switchboard Maven repo | hard | `expo-build-properties` → `extraMavenRepos` (one line, folds into the EBP block; see decision) | **nothing** — autolink injects it, unless the app uses `FAIL_ON_PROJECT_REPOS` → declare in `android/build.gradle` |
 | `useLegacyPackaging` / `extractNativeLibs` | hard (`ggml_abort` — Whisper `dlopen`s its ggml CPU backends off disk) | `expo-build-properties` → `useLegacyPackaging: true` | `packagingOptions { jniLibs { useLegacyPackaging true } }` in `app/build.gradle` |
 | Drop 32-bit `x86` | hard (AARs ship `arm64-v8a`/`armeabi-v7a`/`x86_64` only) | `expo-build-properties` → `buildArchs` | `reactNativeArchitectures=armeabi-v7a,arm64-v8a,x86_64` in `gradle.properties` |
-| NDK r29 (`29.0.14206865`) | hard (`dlopen` fails at launch — the prebuilt `.so` needs `__cxa_init_primary_exception`, absent from the r27 default) | **small app-side config plugin** (`expo-build-properties` has no `ndkVersion` key) + `sdkmanager --install "ndk;29.0.14206865"` | `ndkVersion "29.0.14206865"` in `app/build.gradle` + `sdkmanager` install |
-| `noCompress += ['bin']` | optional (cheaper filesDir copy + reliable `openFd` size-check; copy still works without it) | same small app-side config plugin | `androidResources { noCompress += ['bin'] }` in `app/build.gradle` |
-| Models into `assets/` | hard (not bundled in the AARs — iOS bakes them into the xcframeworks) | `download-android-models.js` → `android/app/src/main/assets` (run **after** `expo prebuild`) | `download-android-models.js` → `android/app/src/main/assets` |
+| NDK r29 (`29.0.14206865`) | hard (`dlopen` fails at launch — the prebuilt `.so` needs `__cxa_init_primary_exception`, absent from the r27 default) | **documented edit** — set `ndkVersion "29.0.14206865"` in `app/build.gradle` after `prebuild` (`expo-build-properties` has no `ndkVersion` key; re-apply after `prebuild --clean`) + `sdkmanager --install "ndk;29.0.14206865"` | `ndkVersion "29.0.14206865"` in `app/build.gradle` + `sdkmanager` install |
+| Android models | hard (not bundled in the AARs — iOS bakes them into the xcframeworks) | **automatic** on `npm install` (postinstall → library `assets/models/`, merged into the APK); fallback `download-android-models.js`; opt out with `EDGESPEECH_SKIP_ANDROID_MODELS` | same — automatic on `npm install`; fallback `download-android-models.js` |
 | Mic permission | hard | **nothing to declare** (library merges); request at runtime | **nothing to declare** (library merges); request at runtime |
 
 ## Things to notice across the bases
@@ -72,12 +76,12 @@ Each row shows how the **app** satisfies a requirement the library imposes.
 1. **Bare RN's surface is simplest** — no plugins anywhere: the repo comes free from
    autolinking, and a few committed edits to `gradle.properties` + `app/build.gradle`
    cover the rest.
-2. **The only Expo-specific custom code is the app-side NDK plugin.** It exists purely
-   because `prebuild` wipes manual `android/` edits and `expo-build-properties` has no
-   `ndkVersion` / `noCompress` key. It's *app-owned* (in `example/plugins/`), tiny, and
-   touches only what has no declarative path — the app pinning its own toolchain.
+2. **NDK is the one thing with no declarative path on Expo.** `expo-build-properties`
+   has no `ndkVersion` key, so it's a documented manual edit to `app/build.gradle` after
+   `prebuild` — no library *or* app config plugin. The edit persists across normal
+   `expo run:android`; re-apply it after a `prebuild --clean`.
 3. **Everything else on Expo is declarative** via `expo-build-properties` (repo,
-   packaging, ABIs) — no library config plugin (see decision).
+   packaging, ABIs) in `app.json` — no config plugin at all.
 
 ## Concrete artifacts per base
 
@@ -91,14 +95,15 @@ Each row shows how the **app** satisfies a requirement the library imposes.
       "useLegacyPackaging": true,
       "buildArchs": ["armeabi-v7a", "arm64-v8a", "x86_64"]
     }
-  }],
-  "./plugins/withEdgeSpeechNdk"    // app-owned → ndkVersion + noCompress
+  }]
 ]
 ```
 
-Plus `expo-build-properties` in `package.json` and the model-download step. Because
-Expo regenerates `android/` on every `prebuild`, all of this must live in `app.json` /
-the plugin to be clean-clone reproducible (the "durable Android config" task).
+Plus `expo-build-properties` in `package.json` and a **manual `ndkVersion` edit** to
+`app/build.gradle` after `prebuild` (no EBP key for it). Models download automatically
+on `npm install` (postinstall → library assets, merged into the APK). The EBP settings
+live in `app.json` so they survive `prebuild`; only the NDK edit is re-applied after a
+`prebuild --clean` (models are library-side, unaffected).
 
 **Bare RN** (documented in the README; no bare example shipped) — committed edits:
 
@@ -109,11 +114,11 @@ reactNativeArchitectures=armeabi-v7a,arm64-v8a,x86_64
 // android/app/build.gradle → android { }
 ndkVersion "29.0.14206865"
 packagingOptions { jniLibs { useLegacyPackaging true } }
-androidResources { noCompress += ['bin'] }
 // Maven repo: nothing (autolinked) unless the app uses FAIL_ON_PROJECT_REPOS
 ```
 
-Plus `sdkmanager --install "ndk;29.0.14206865"` and the model-download step.
+Plus `sdkmanager --install "ndk;29.0.14206865"`. Models download automatically on
+`npm install` (postinstall → library assets, merged into the APK).
 
 ## Decisions
 
@@ -139,13 +144,19 @@ favour of documenting `extraMavenRepos`. Rationale:
 
 Bare RN is unchanged (autolink injection).
 
-### 2. Don't force NDK / ABIs / packaging from a library plugin
+### 2. Toolchain (NDK / ABIs / packaging) is documented, not plugin-injected
 
 Those are the app's build toolchain (see the ownership principle). A library states
-them as **documented requirements**; the app sets them via `expo-build-properties`
-(packaging, ABIs) or a small app-owned plugin (NDK — no `expo-build-properties` key).
-This keeps the library from overriding a consumer's toolchain and conflicting with
-their other native deps.
+them as **documented requirements**; the app sets ABIs and packaging via
+`expo-build-properties`, and pins the NDK with a documented `app/build.gradle` edit
+after `prebuild` (`expo-build-properties` has no `ndkVersion` key).
+
+We ship **no config plugin** for the NDK — neither from the library nor as an app-side
+plugin in the example. A single-setting config plugin isn't worth the machinery, and on
+Expo the NDK edit is manual (re-applied after `prebuild --clean`), matching how any
+consumer pins their own toolchain. Trade-off: a clean `prebuild` doesn't re-pin the NDK
+by itself — the edit is a documented manual step. This keeps the library from
+overriding a consumer's toolchain and conflicting with their other native deps.
 
 ## React Native facts this rests on
 

@@ -10,6 +10,7 @@ const { execSync } = require('child_process')
 const { S3Client, GetObjectCommand } = require('@aws-sdk/client-s3')
 const { defaultProvider } = require('@aws-sdk/credential-provider-node')
 const { intro, outro, log, note, tasks } = require('@clack/prompts')
+const { downloadAndroidModels } = require('./download-android-models')
 
 const SDK_VERSION = 'release/3.2.3'
 // const SDK_VERSION = 'develop'
@@ -145,6 +146,20 @@ async function main() {
     if (failures.length > 0) {
       log.error(`Installation incomplete — ${failures.length} package(s) failed`)
       return 1
+    }
+  }
+
+  // Android models (AARs ship none) → the library module's own assets, merged into the
+  // app's APK. Warn (don't fail) so an iOS-only or offline install still succeeds.
+  if (process.env.EDGESPEECH_SKIP_ANDROID_MODELS) {
+    log.warn('Skipping Android models (EDGESPEECH_SKIP_ANDROID_MODELS set)')
+  } else {
+    log.info('Downloading Android models')
+    try {
+      await downloadAndroidModels()
+    } catch (err) {
+      log.warn(`Android models not downloaded: ${err.message}`)
+      log.warn('Fallback: node node_modules/@synervoz/edgespeech/scripts/download-android-models.js')
     }
   }
 

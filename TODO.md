@@ -29,7 +29,7 @@ the full plan and locked decisions.
 - [x] Whisper loads via `loadModel` action (param `modelPath`), Android-only, in
       `createEngine()` — verified from .so; no `initializeModel` key exists; iOS
       auto-loads its bundled model (untouched). 81 tests pass, tsc/eslint clean
-- [x] Models downloaded into example assets; app build sets `noCompress += ['bin']`
+- [x] Models downloaded into example assets
 - [x] Whisper ggml backends load on device — needed `extractNativeLibs=true` +
       Kotlin `Switchboard.initialize` (registers PlatformInfoProvider → nativeLibraryDir)
 - [x] **STT verified on device** — Whisper transcribes (user confirmed "it worked")
@@ -51,13 +51,35 @@ the full plan and locked decisions.
 - [ ] Verify `onInterrupted` with AEC engaged (Samsung + Pixel)
 
 ## Phase E — Polish & docs
-- [ ] **Mic-permission gate before engine `start`** — SDK segfaults
-      (`AudioEngineOboe::initInputStream`) if `RECORD_AUDIO` not granted. Gate
-      `listen()`/`speak()` on permission; example must request before starting.
+- [x] **Mic-permission gate before engine `start`** — `listen()`/`speak()` now call
+      `ensureAndroidMicPermission()` (Android-only) which `PermissionsAndroid.check`s
+      `RECORD_AUDIO` and throws a clean `PERMISSION_DENIED` before the engine opens the
+      mic (was: SDK SIGSEGV in `AudioEngineOboe::initInputStream`). Checks (never
+      prompts) — caller uses `requestMicrophonePermission()` first; iOS is a no-op.
+      Example already compatible (requests first + wrapped calls surface errors).
+      3 new unit tests; 87 pass, tsc/eslint/build clean. Device re-test pending.
 - [x] README Android section (Expo + bare-RN paths, Maven repo, NDK, x86, models)
-- [ ] Durable Android config via `expo-build-properties` (Maven `extraMavenRepos`,
-      NDK) — example config currently git-ignored, not clean-clone reproducible
-- [ ] Parameterize `download-android-models.js` (drop `example/` default coupling)
+- [x] Durable Android config authored — `expo-build-properties` block
+      (`extraMavenRepos` + `useLegacyPackaging` + `buildArchs`) in example `app.json`
+      + `expo-build-properties@~1.0.10` in `package.json`. NDK is a **documented**
+      `app/build.gradle` edit (no config plugin — EBP has no `ndkVersion` key).
+      Ownership split + decisions in `RN.md`; README both paths synced.
+- [x] Verified via `npm install` + `expo prebuild -p android --clean` (Node 26 —
+      clears RN/Metro's `>=20.19.4` floor). Clean regen landed the 3 EBP settings:
+      `reactNativeArchitectures` + `expo.useLegacyPackaging` in `gradle.properties`, and
+      the Maven repo as `android.extraMavenRepos` (injected at **settings scope** by
+      `useExpoModules()`, settings.gradle:32 — correctly timed under
+      `--configure-on-demand`, unlike the library's subproject injection). NDK is **not**
+      auto-pinned by prebuild (documented manual edit, by design).
+- [ ] Final on-device confirmation: `npm install` (postinstall pulls ~290 MB of models
+      into library assets) → `expo run:android` (the EBP settings-scope repo injection is
+      proven wired, but AAR download + model asset-merge not yet exercised on device)
+- [x] Auto-provision Android models via `postinstall` (like iOS frameworks) — downloads
+      into the **library's** `android/src/main/assets/models/` (asset-merged into the APK,
+      works Expo + bare RN); warn-don't-fail, `EDGESPEECH_SKIP_ANDROID_MODELS` opt-out.
+      `files` excludes the models from publish; `.gitignore` already covers them.
+- [x] `download-android-models.js` decoupled from `example/` — default target is now the
+      library's own assets; exports `downloadAndroidModels()`, CLI-guarded, shipped in `files`.
 - [ ] `[AssetsManager] Failed to create assets directory at path: output` warning
 - [ ] iOS regression check (`npx expo run:ios`) — init path is Platform-gated
 - [ ] Example `android/` commit policy; CHANGELOG + version bump

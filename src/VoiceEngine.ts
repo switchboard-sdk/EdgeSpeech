@@ -283,6 +283,7 @@ class VoiceEngine {
     if (!this.isInitialized) {
       throw this.makeError('NOT_INITIALIZED', 'Switchboard SDK not initialized. Call initialize() first.')
     }
+    await this.ensureAndroidMicPermission()
     await this.ensureAndroidModel()
     if (!this.engineId) {
       this.createEngine()
@@ -318,6 +319,7 @@ class VoiceEngine {
     if (!text) {
       return
     }
+    await this.ensureAndroidMicPermission()
     await this.ensureAndroidModel()
     if (!this.engineId) {
       this.createEngine()
@@ -351,6 +353,25 @@ class VoiceEngine {
     this.isSpeaking = false
     this.ensureClient().callAction('ttsNode', 'stop', {})
     this.setState(this.isListening ? 'listening' : 'idle')
+  }
+
+  /**
+   * Android: fail fast with PERMISSION_DENIED if RECORD_AUDIO isn't granted — the SDK
+   * segfaults (AudioEngineOboe::initInputStream) when the engine opens the mic without
+   * it. Only checks (never prompts) — call requestMicrophonePermission() first. iOS
+   * tolerates a missing grant, so this is a no-op there.
+   */
+  private async ensureAndroidMicPermission(): Promise<void> {
+    if (Platform.OS !== 'android') {
+      return
+    }
+    const granted = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.RECORD_AUDIO)
+    if (!granted) {
+      throw this.makeError(
+        'PERMISSION_DENIED',
+        'Microphone permission not granted. Call requestMicrophonePermission() before listen() or speak().'
+      )
+    }
   }
 
   async requestMicrophonePermission(): Promise<boolean> {

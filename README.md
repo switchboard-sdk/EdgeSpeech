@@ -83,15 +83,16 @@ npx expo run:ios
 ### Android Setup
 
 > [!NOTE]
-> Android support is in progress. `RECORD_AUDIO` is declared by the library and merged into your app automatically (requested at runtime via `requestMicrophonePermission()`). The on-device models (Whisper + the Sherpa TTS voice) are **not** bundled in the package — download them into your app's assets before building (step below).
+> Android support is in progress. `RECORD_AUDIO` is declared by the library and merged into your app automatically (requested at runtime via `requestMicrophonePermission()`). The on-device models (Whisper + the Sherpa TTS voice, ~290 MB) aren't in the npm package, but they **download automatically on `npm install`** (a postinstall script) into the library's assets and merge into your APK — no manual step. Set `EDGESPEECH_SKIP_ANDROID_MODELS=1` to opt out (e.g. iOS-only or CI).
 
-Follow **one** path depending on your app.
+Follow **one** path depending on your app. For *why* each setting lives where it does
+(the library-vs-app ownership split and the Expo-vs-bare-RN mechanics), see [`RN.md`](RN.md).
 
 #### Expo
 
 **1. Enable the New Architecture** — `"newArchEnabled": true` in `app.json` (default in recent Expo SDKs).
 
-**2. Add the Switchboard Maven repo + set ABIs** via [`expo-build-properties`](https://docs.expo.dev/versions/latest/sdk/build-properties/) in `app.json`. The repo must be declared here (not left to the library) because `expo run:android` builds with `--configure-on-demand`, under which the library's own repo injection runs too late. `buildArchs` drops 32-bit `x86` — the AARs ship `arm64-v8a`/`armeabi-v7a`/`x86_64` only:
+**2. Add the Switchboard Maven repo, ABIs, and packaging** via [`expo-build-properties`](https://docs.expo.dev/versions/latest/sdk/build-properties/) in `app.json`. The repo must be declared here (not left to the library) because `expo run:android` builds with `--configure-on-demand`, under which the library's own repo injection runs too late. `buildArchs` drops 32-bit `x86` (the AARs ship `arm64-v8a`/`armeabi-v7a`/`x86_64` only); `useLegacyPackaging` extracts native libs to disk so Whisper's ggml backends can `dlopen` (else `ggml_abort` at runtime):
 
 ```json
 {
@@ -99,6 +100,7 @@ Follow **one** path depending on your app.
     ["expo-build-properties", {
       "android": {
         "extraMavenRepos": ["https://s3.amazonaws.com/synervoz-android-maven-repository"],
+        "useLegacyPackaging": true,
         "buildArchs": ["armeabi-v7a", "arm64-v8a", "x86_64"]
       }
     }]
@@ -106,21 +108,22 @@ Follow **one** path depending on your app.
 }
 ```
 
-**3. Download the models** (after the `android/` project exists):
+**3. Models — automatic.** They download on `npm install` (postinstall) into the library's own assets and merge into your APK — nothing to run. If your package manager gated install scripts (npm/pnpm may), run the fallback:
+
+```bash
+node node_modules/@synervoz/edgespeech/scripts/download-android-models.js
+```
+
+**4. Generate the native project, pin NDK, and build:**
 
 ```bash
 npx expo prebuild -p android
-node node_modules/@synervoz/edgespeech/scripts/download-android-models.js android/app/src/main/assets
-```
-
-**4. Build:**
-
-```bash
+# then set ndkVersion "29.0.14206865" in android/app/build.gradle (see note below)
 npx expo run:android
 ```
 
 > [!NOTE]
-> If the app crashes at launch with a `dlopen` / `UnsatisfiedLinkError`, pin **NDK r29**. `expo-build-properties` has no `ndkVersion` option, so set `android.ndkVersion "29.0.14206865"` in `android/app/build.gradle` (or a small config plugin), and install it: `sdkmanager --install "ndk;29.0.14206865"`.
+> **NDK r29 is required** — the prebuilt Switchboard `.so` needs `__cxa_init_primary_exception`, absent from the r27 default, so `dlopen` fails at launch without it. `expo-build-properties` has no `ndkVersion` key, so after `prebuild` set `ndkVersion "29.0.14206865"` in `android/app/build.gradle`'s `android { }` block, and install the NDK: `sdkmanager --install "ndk;29.0.14206865"`. The edit persists across normal `expo run:android` — re-apply it after any `prebuild --clean`.
 
 #### Bare React Native
 
@@ -140,20 +143,30 @@ allprojects {
 reactNativeArchitectures=armeabi-v7a,arm64-v8a,x86_64
 ```
 
-**4. Download the models:**
+**4. Extract native libs** so Whisper's ggml backends can `dlopen` (else `ggml_abort` at runtime) — in `android/app/build.gradle`:
 
-```bash
-node node_modules/@synervoz/edgespeech/scripts/download-android-models.js android/app/src/main/assets
+```gradle
+android {
+  packagingOptions { jniLibs { useLegacyPackaging true } }
+}
 ```
 
-**5. Build:**
+Also pin **NDK r29** in the same `android { }` block (`ndkVersion "29.0.14206865"`) — see the note below.
+
+**5. Models — automatic** on `npm install` (postinstall → the library's assets, merged into your APK). Fallback if install scripts were gated:
+
+```bash
+node node_modules/@synervoz/edgespeech/scripts/download-android-models.js
+```
+
+**6. Build:**
 
 ```bash
 npx react-native run-android
 ```
 
 > [!NOTE]
-> If the app crashes at launch with a `dlopen` / `UnsatisfiedLinkError`, pin **NDK r29**: set `android.ndkVersion "29.0.14206865"` in `android/app/build.gradle` and install it: `sdkmanager --install "ndk;29.0.14206865"`.
+> **NDK r29 is required** — the prebuilt Switchboard `.so` needs `__cxa_init_primary_exception`, absent from the r27 default, so `dlopen` fails at launch without it. Set `ndkVersion "29.0.14206865"` in `android/app/build.gradle`'s `android { }` block (step 4) and install it: `sdkmanager --install "ndk;29.0.14206865"`.
 
 ## API Reference
 

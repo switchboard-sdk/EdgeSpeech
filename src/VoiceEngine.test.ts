@@ -172,6 +172,7 @@ describe('VoiceEngine Android platform branches', () => {
   let prepareModel: jest.Mock
   let prepareArchive: jest.Mock
   let initializeSdk: jest.Mock
+  let checkPermission: jest.SpyInstance
 
   const ttsLoadCall = () =>
     sentCalls().find(
@@ -186,6 +187,8 @@ describe('VoiceEngine Android platform branches', () => {
     prepareArchive = jest.fn().mockResolvedValue(TTS_BASE)
     initializeSdk = jest.fn().mockResolvedValue(null)
     RN.NativeModules.EdgeSpeechModels = { prepareModel, prepareArchive, initializeSdk }
+    // Mic-permission gate: default to granted so the existing listen/speak tests pass.
+    checkPermission = jest.spyOn(RN.PermissionsAndroid, 'check').mockResolvedValue(true)
   })
 
   afterEach(() => {
@@ -296,5 +299,36 @@ describe('VoiceEngine Android platform branches', () => {
       .mockResolvedValue(RN.PermissionsAndroid.RESULTS.DENIED)
 
     await expect(voiceEngine.requestMicrophonePermission()).rejects.toThrow(/denied/i)
+  })
+
+  it('listen() throws PERMISSION_DENIED and never opens the mic when RECORD_AUDIO is not granted', async () => {
+    RN.Platform.OS = 'android'
+    checkPermission.mockResolvedValue(false)
+    voiceEngine.initialize('app-id', 'app-secret')
+
+    await expect(voiceEngine.listen()).rejects.toThrow(/permission/i)
+    expect(checkPermission).toHaveBeenCalledWith(RN.PermissionsAndroid.PERMISSIONS.RECORD_AUDIO)
+    // Gate fires before the engine is created/started — the SDK never opens the mic.
+    expect(findAction('createEngine')).toBeUndefined()
+    expect(findAction('start')).toBeUndefined()
+  })
+
+  it('speak() throws PERMISSION_DENIED when RECORD_AUDIO is not granted (combined mic+AEC engine)', async () => {
+    RN.Platform.OS = 'android'
+    checkPermission.mockResolvedValue(false)
+    voiceEngine.initialize('app-id', 'app-secret')
+
+    await expect(voiceEngine.speak('hello')).rejects.toThrow(/permission/i)
+    expect(findAction('start')).toBeUndefined()
+    expect(findAction('synthesize')).toBeUndefined()
+  })
+
+  it('does not gate on PermissionsAndroid.check on iOS (the OS handles a missing grant)', async () => {
+    RN.Platform.OS = 'ios'
+    voiceEngine.initialize('app-id', 'app-secret')
+    await voiceEngine.listen()
+
+    expect(checkPermission).not.toHaveBeenCalled()
+    expect(findAction('start')).toBeDefined()
   })
 })

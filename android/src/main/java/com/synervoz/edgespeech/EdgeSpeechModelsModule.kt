@@ -54,8 +54,9 @@ class EdgeSpeechModelsModule(private val reactContext: ReactApplicationContext) 
       val assets = reactContext.assets
       val dest = File(reactContext.filesDir, assetPath)
 
-      // Uncompressed asset (app build sets androidResources.noCompress += 'bin'):
-      // openFd().length gives the real size for a cheap up-to-date check.
+      // Cheap up-to-date check via the asset's real size. openFd().length only works
+      // on uncompressed assets — the .bin is compressed in the APK, so this usually
+      // throws and we fall back to an existence check (see catch below).
       val assetSize: Long =
         try {
           assets.openFd(assetPath).use { it.length }

@@ -1,12 +1,15 @@
 #!/usr/bin/env node
 /**
- * Download the on-device models into the Android app's assets (Android AARs ship
- * no models; the nodes load them by file path at runtime). Places Whisper models
- * under assets/models/whisper/ and the Sherpa TTS voice zip under
- * assets/models/sherpa/tts/. Idempotent. Re-run after `expo prebuild --clean`.
+ * Download the on-device models for Android. Android AARs ship no models (iOS bakes
+ * them into the SDK frameworks), so they're fetched into the **library module's own**
+ * assets (`android/src/main/assets/models/...`); Android's asset-merge then bundles
+ * them into the consuming app's APK — no app-side setup, works for Expo and bare RN.
+ *
+ * Runs automatically via `postinstall`. Also runnable manually as a fallback if your
+ * package manager skipped install scripts (npm/pnpm may gate them). Idempotent.
  *
  * Usage: node scripts/download-android-models.js [assetsRootDir]
- *   (default: example/android/app/src/main/assets)
+ *   (default: the library's own android/src/main/assets)
  */
 const fs = require('fs')
 const path = require('path')
@@ -14,9 +17,8 @@ const https = require('https')
 
 const S3 = 'https://switchboard-sdk-public.s3.amazonaws.com/assets/models'
 
-const assetsRoot =
-  process.argv[2] ||
-  path.join(__dirname, '..', 'example', 'android', 'app', 'src', 'main', 'assets')
+// Default target: the library module's own assets, merged into the app's APK at build.
+const DEFAULT_ASSETS_ROOT = path.join(__dirname, '..', 'android', 'src', 'main', 'assets')
 
 // Whisper STT ggml models + the default Sherpa TTS voice (en_GB). de_DE is
 // available at ${S3}/sherpa/tts/de_DE.zip — add it here to bundle it too.
@@ -78,8 +80,8 @@ function download(url, dest, expectedSize) {
   })
 }
 
-async function main() {
-  console.log(`Models → ${assetsRoot}`)
+async function downloadAndroidModels(assetsRoot = DEFAULT_ASSETS_ROOT) {
+  console.log(`Android models → ${assetsRoot}`)
   for (const { url, rel } of DOWNLOADS) {
     const dest = path.join(assetsRoot, rel)
     fs.mkdirSync(path.dirname(dest), { recursive: true })
@@ -91,10 +93,14 @@ async function main() {
     console.log(`Downloading ${rel} (${Math.round((size / 1048576) * 10) / 10} MB)...`)
     await download(url, dest, size)
   }
-  console.log('Done.')
+  console.log('Android models ready.')
 }
 
-main().catch((err) => {
-  console.error(`\nFailed: ${err.message}`)
-  process.exit(1)
-})
+module.exports = { downloadAndroidModels, DEFAULT_ASSETS_ROOT }
+
+if (require.main === module) {
+  downloadAndroidModels(process.argv[2]).catch((err) => {
+    console.error(`\nFailed: ${err.message}`)
+    process.exit(1)
+  })
+}
