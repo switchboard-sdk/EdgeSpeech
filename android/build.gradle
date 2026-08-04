@@ -17,21 +17,13 @@ def safeExtGet(prop, fallback) {
 // Matches the iOS SDK version (scripts/postinstall.js SDK_VERSION = release/3.2.3).
 def switchboardSdkVersion = "3.2.3"
 
-// ── Zero-config wiring for the consuming app ─────────────────────────────────
 // The Switchboard C++ TurboModule is compiled in the *app's* native build (RN
 // C++ autolinking), so the app must (a) know the Switchboard Maven repo and
-// (b) enable Prefab. Inject both from here so an app only ever needs to
-// `npm install` + import — no manual android/ edits.
-rootProject.allprojects {
-    repositories {
-        maven { url "https://s3.amazonaws.com/synervoz-android-maven-repository" }
-    }
-}
-rootProject.subprojects { sp ->
-    sp.plugins.withId("com.android.application") {
-        sp.android.buildFeatures.prefab = true
-    }
-}
+// (b) enable Prefab. The app declares both itself: bare RN via the README's
+// Android setup snippet, Expo via this package's config plugin (app.plugin.js).
+// We don't inject them across projects from here — Gradle's Project Isolation
+// forbids configuring another project, and the injection landed too late under
+// Expo's configuration ordering anyway.
 
 react {
     // Codegen reads the TurboModule spec from the package's TS sources and

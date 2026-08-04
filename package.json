@@ -9,7 +9,8 @@
       "require": "./dist/index.js",
       "types": "./dist/index.d.ts"
     },
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./app.plugin.js": "./app.plugin.js"
   },
   "files": [
     "src",
@@ -19,6 +20,8 @@
     "cpp",
     "edgespeech.podspec",
     "react-native.config.js",
+    "app.plugin.js",
+    "plugin",
     "scripts/postinstall.js",
     "scripts/download-android-models.js",
     "README.md",
@@ -68,6 +71,7 @@
     "react-native": ">=0.81.0"
   },
   "devDependencies": {
+    "@expo/config-plugins": "^54.0.0",
     "@react-native/babel-preset": "^0.76.0",
     "@react-native/eslint-config": "^0.85.2",
     "@react-native/metro-config": "^0.76.0",

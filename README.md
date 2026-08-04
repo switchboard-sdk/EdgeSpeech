@@ -83,55 +83,73 @@ npx expo run:ios
 ### Android Setup
 
 > [!NOTE]
+>
 > - `RECORD_AUDIO` is added by the library; request it at runtime via `requestMicrophonePermission()`.
 > - Models (~290 MB) download on `npm install` and merge into your APK. Skip with `EDGESPEECH_SKIP_ANDROID_MODELS=1`; if install scripts are blocked, run `node node_modules/@synervoz/edgespeech/scripts/download-android-models.js`.
 
-Both paths need **NDK r29** installed — `sdkmanager --install "ndk;29.0.14206865"` (the prebuilt Switchboard `.so` needs a libc++ symbol absent from the r27 default). The other settings drop 32-bit `x86` (no AAR for it) and enable legacy packaging (extracts native libs so Whisper's ggml backends can `dlopen`).
+Both paths need **NDK r29** installed — `sdkmanager --install "ndk;29.0.14206865"`. The prebuilt Switchboard `.so` reference `__cxa_init_primary_exception`, a libc++ symbol absent from the template's r27 default; your app packages exactly one `libc++_shared.so`, so on r27 the app builds and installs but dies at launch with `dlopen failed: cannot locate symbol`.
+
+The remaining settings: **Prefab** and the **Maven repo** (EdgeSpeech's C++ TurboModule is compiled in your app's native build, so the app resolves the Switchboard AARs itself), dropping 32-bit `x86` (no AAR for it), and legacy packaging (extracts native libs so Whisper's ggml backends can `dlopen`).
 
 #### Expo
 
-Set the New Architecture + build properties in `app.json` (the Maven repo must be declared here — the library's injection runs too late under `expo run:android`'s `--configure-on-demand`):
+Add the config plugin to `app.json` — **before** prebuilding, since prebuild is what applies it. It takes no options and does all four Android settings for you (Maven repo, Prefab, NDK 29, legacy packaging + dropping `x86`), so you don't need `expo-build-properties`:
 
 ```json
 {
   "expo": {
     "newArchEnabled": true,
-    "plugins": [
-      ["expo-build-properties", {
-        "android": {
-          "extraMavenRepos": ["https://s3.amazonaws.com/synervoz-android-maven-repository"],
-          "useLegacyPackaging": true,
-          "buildArchs": ["armeabi-v7a", "arm64-v8a", "x86_64"]
-        }
-      }]
-    ]
+    "plugins": ["@synervoz/edgespeech"]
   }
 }
 ```
 
-`expo-build-properties` has no `ndkVersion` key, so pin it in `android/app/build.gradle` after prebuild (re-apply after `prebuild --clean`), then build:
+Then build:
 
 ```bash
 npx expo prebuild -p android
-#   android { ndkVersion "29.0.14206865" }   ← add to android/app/build.gradle
 npx expo run:android
+```
+
+If you prebuilt _before_ adding the plugin, prebuild again — otherwise the generated `android/` has no Maven repo, no Prefab and NDK 27, and the app crashes at launch. Every Android build prints the NDK it used, so you can confirm it landed:
+
+```
+[ExpoRootProject]  - ndk:  29.0.14206865
 ```
 
 #### Bare React Native
 
-New Architecture is on by default (RN 0.76+), and the Maven repo is auto-injected by autolinking — declare it yourself only if you use `FAIL_ON_PROJECT_REPOS`. In `android/gradle.properties`:
+New Architecture is on by default (RN 0.76+). EdgeSpeech's C++ TurboModule is compiled in _your app's_ native build, so your app declares the Switchboard Maven repo and enables Prefab itself.
 
-```
-reactNativeArchitectures=armeabi-v7a,arm64-v8a,x86_64
+In `android/build.gradle` — at the project level, matching how React Native's Gradle plugin adds its own repos (a settings-level `dependencyResolutionManagement` block is ignored under Gradle's default `PREFER_PROJECT` mode):
+
+```gradle
+buildscript {
+  ext {
+    ndkVersion = "29.0.14206865"   // not the template's 27.x
+  }
+}
+
+allprojects {
+  repositories {
+    maven { url "https://s3.amazonaws.com/synervoz-android-maven-repository" }
+  }
+}
 ```
 
 In `android/app/build.gradle`:
 
 ```gradle
 android {
-  ndkVersion "29.0.14206865"
+  buildFeatures { prefab true }
   packagingOptions { jniLibs { useLegacyPackaging true } }
 }
+```
+
+In `android/gradle.properties`:
+
+```
+reactNativeArchitectures=armeabi-v7a,arm64-v8a,x86_64
 ```
 
 Then `npx react-native run-android`.

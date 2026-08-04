@@ -6,18 +6,7 @@
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
-    "plugins": [
-      [
-        "expo-build-properties",
-        {
-          "android": {
-            "extraMavenRepos": ["https://s3.amazonaws.com/synervoz-android-maven-repository"],
-            "useLegacyPackaging": true,
-            "buildArchs": ["armeabi-v7a", "arm64-v8a", "x86_64"]
-          }
-        }
-      ]
-    ],
+    "plugins": ["@synervoz/edgespeech"],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.switchboard.voiceexample",
