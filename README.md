@@ -60,15 +60,16 @@ npm install @synervoz/edgespeech
 node node_modules/@synervoz/edgespeech/scripts/postinstall.js
 ```
 
-The second command downloads what isn't bundled in the package: the Switchboard xcframeworks into
-`ios/Frameworks/` (~1.6 GB) and the Whisper/Sherpa models into `android/src/main/assets/`
-(~290 MB, merged into your APK). It runs automatically as a `postinstall`, but **npm 11+ blocks
-install scripts by default**, so run it explicitly — nothing will build until it has.
+The second command is the `postinstall` script: it downloads the native Switchboard frameworks into
+`ios/Frameworks/` (~1.6 GB) and the Android models into `android/src/main/assets/` (~290 MB, merged
+into your APK) — they aren't bundled in the package. It runs automatically on `npm install`, but
+package managers that block install scripts (npm 11+ does by default) skip it, so run it once
+manually — nothing builds until it has.
 
-Skip the Android models with `EDGESPEECH_SKIP_ANDROID_MODELS=1`, or fetch just those later with
+Skip the models with `EDGESPEECH_SKIP_ANDROID_MODELS=1`; to re-fetch just those, run
 `node node_modules/@synervoz/edgespeech/scripts/download-android-models.js`.
 
-**2. Install NDK r29** — before your first Android build:
+**2. Install NDK r29.** Both paths need it, before your first Android build:
 
 ```bash
 "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;29.0.14206865"
@@ -77,14 +78,20 @@ Skip the Android models with `EDGESPEECH_SKIP_ANDROID_MODELS=1`, or fetch just t
 Or from Android Studio: **SDK Manager → SDK Tools → NDK (Side by side) → 29.0.14206865**
 (`cmdline-tools` isn't present in a default Android Studio install).
 
-This one is not optional and fails late: the prebuilt Switchboard `.so` reference
-`__cxa_init_primary_exception`, a libc++ symbol absent from the template's r27 default. Your app
-packages exactly one `libc++_shared.so`, so on r27 the app builds and installs fine, then dies at
-launch with `dlopen failed: cannot locate symbol`.
+The prebuilt Switchboard `.so` reference `__cxa_init_primary_exception`, a libc++ symbol absent
+from the template's r27 default; your app packages exactly one `libc++_shared.so`, so on r27 the
+app builds and installs but dies at launch with `dlopen failed: cannot locate symbol`.
 
-**3. Configure `app.json`** (Expo) — everything EdgeSpeech needs, **before your first prebuild**,
-since prebuild is what applies the config plugin. For bare React Native, skip to
-[Bare React Native](#bare-react-native).
+The remaining settings: **Prefab** and the **Maven repo** (EdgeSpeech's C++ TurboModule is compiled
+in your app's native build, so the app resolves the Switchboard AARs itself), dropping 32-bit `x86`
+(no AAR for it), and legacy packaging (extracts native libs so Whisper's ggml backends can
+`dlopen`).
+
+**3. Configure `app.json`** (Expo — for bare React Native, skip to
+[Bare React Native](#bare-react-native)). Add the config plugin **before** prebuilding, since
+prebuild is what applies it. It takes no options and does all four Android settings for you (Maven
+repo, Prefab, NDK 29, legacy packaging + dropping `x86`), so you don't need
+`expo-build-properties`:
 
 ```json
 {
@@ -102,15 +109,12 @@ since prebuild is what applies the config plugin. For bare React Native, skip to
 }
 ```
 
-- **`plugins`** — the config plugin takes no options and does all four Android settings for you:
-  the **Maven repo** and **Prefab** (EdgeSpeech's C++ TurboModule is compiled in your app's native
-  build, so the app resolves the Switchboard AARs itself), **NDK 29**, **legacy packaging**
-  (extracts native libs so Whisper's ggml backends can `dlopen`) and dropping 32-bit `x86` (no AAR
-  for it). You don't need `expo-build-properties`.
-- **`bundleIdentifier` / `package`** — prebuild fails without them, and a fresh `create-expo-app`
-  project sets neither.
-- **`NSMicrophoneUsageDescription`** — iOS only. On Android `RECORD_AUDIO` is added by the library;
-  request it at runtime with `requestMicrophonePermission()`.
+The identifiers matter too: `expo run:ios` / `expo run:android` prebuild your native projects, and
+prebuild fails without them — a fresh `create-expo-app` project has neither.
+
+> [!NOTE]
+> `NSMicrophoneUsageDescription` is iOS only. On Android, `RECORD_AUDIO` is added by the library;
+> request it at runtime via `requestMicrophonePermission()`.
 
 **4. Build:**
 
@@ -129,16 +133,16 @@ launch. Every Android build prints the NDK it used, so you can confirm it landed
 
 ### Bare React Native
 
-New Architecture is on by default (RN 0.76+); for older setups use `RCT_NEW_ARCH_ENABLED=1` at
-`pod install`. Add the microphone permission to your `Info.plist` directly:
+New Architecture is on by default (RN 0.76+) — for older setups, `RCT_NEW_ARCH_ENABLED=1` at
+`pod install`. Add microphone permission to your `Info.plist`:
 
 ```xml
 <key>NSMicrophoneUsageDescription</key>
 <string>This app needs microphone access for voice input</string>
 ```
 
-There's no config plugin to apply the Android settings, so your app declares the Switchboard Maven
-repo and enables Prefab itself.
+EdgeSpeech's C++ TurboModule is compiled in _your app's_ native build, so your app declares the
+Switchboard Maven repo and enables Prefab itself.
 
 In `android/build.gradle` — at the project level, matching how React Native's Gradle plugin adds its own repos (a settings-level `dependencyResolutionManagement` block is ignored under Gradle's default `PREFER_PROJECT` mode):
 
