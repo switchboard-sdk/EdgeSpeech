@@ -1,12 +1,12 @@
 # EdgeSpeech
 
-A React Native hook that provides on-device AI speech processing, completely locally.
-This can be up to 99% cheaper than cloud speech-to-speech.
+A React Native hook that provides on-device AI speech processing on iOS and Android,
+completely locally. This can be up to 99% cheaper than cloud speech-to-speech.
 
-| Platform | Status      |
-| -------- | ----------- |
-| iOS      | Supported   |
-| Android  | Coming soon |
+| Platform | Status    |
+| -------- | --------- |
+| iOS      | Supported |
+| Android  | Supported |
 
 ## Example Usage
 
