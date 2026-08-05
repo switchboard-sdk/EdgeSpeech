@@ -63,6 +63,12 @@ const ANDROID_TTS_VOICES: Record<
 
 const ANDROID_TTS_EXTRACT_DIR = 'sherpa/tts'
 
+// Android AEC: open the mic as voice-communication. Pairs with MODE_IN_COMMUNICATION
+// (set natively on start — see EdgeSpeechAudioSessionModule). The engine's
+// `voiceProcessingEnabled` key is iOS-only (VoiceProcessingIO), so this and the
+// communication route are what engage echo cancellation on Android.
+const ANDROID_VOICE_COMMUNICATION_INPUT_PRESET = 7 // oboe InputPreset.VoiceCommunication
+
 /**
  * The on-device voice pipeline, authored entirely in TypeScript over the
  * Switchboard JSON-RPC channel. This is the TypeScript port of the old native
@@ -81,6 +87,9 @@ class VoiceEngine {
   private isSpeaking = false
   private eventsWired = false
 
+  /** Why the last initialize() failed, if it did — folded into NOT_INITIALIZED rejections. */
+  private initFailureReason: string | null = null
+
   private config: VoiceEngineConfig = {
     vadSensitivity: 0.5,
     sampleRate: 16000,
@@ -95,7 +104,10 @@ class VoiceEngine {
   /** Whether the Sherpa TTS voice has been loaded into the ttsNode (Android). */
   private androidTtsLoaded = false
 
-  /** Pending Kotlin SDK init on Android; awaited before the engine is created. */
+  /**
+   * Pending Kotlin SDK init on Android. Awaited (and its outcome checked) by
+   * ensureAndroidInitialized() before the engine is created.
+   */
   private androidInitPromise: Promise<void> | null = null
 
   private readonly listeners = new Map<EdgeSpeechEventName, Set<Listener>>()
@@ -127,12 +139,17 @@ class VoiceEngine {
     }
     const client = this.ensureClient()
     this.wireEvents()
+    this.initFailureReason = null
 
     if (Platform.OS === 'android') {
       // Android inits via Kotlin (registers the PlatformInfoProvider → native-lib
       // dir Whisper needs); listen()/speak() await it before creating the engine.
-      this.androidInitPromise = this.initializeAndroidSdk(appId, appSecret)
+      //
+      // Optimistic, and set BEFORE dispatching: initializeAndroidSdk() runs its
+      // first synchronous stretch during this assignment and clears the flag if it
+      // fails there, so setting it afterwards would resurrect a failed init.
       this.isInitialized = true
+      this.androidInitPromise = this.initializeAndroidSdk(appId, appSecret)
       return
     }
 
@@ -157,17 +174,22 @@ class VoiceEngine {
       // listen()/speak() then rejects NOT_INITIALIZED). Don't throw:
       // EdgeSpeechProvider calls initialize() inside an effect, so throwing would
       // red-box the app instead of firing onError — matches the original module.
-      this.emitError('INIT_FAILED', message)
+      this.failInitialization(message)
       return
     }
     this.isInitialized = true
   }
 
-  /** Android SDK init via Kotlin. Never rejects — failures go to onError; reload is success. */
+  /**
+   * Android SDK init via Kotlin. Never rejects — a failure goes to onError and
+   * leaves the engine uninitialized, exactly as the iOS path above does, so the
+   * next listen()/speak() rejects instead of building a graph on a dead SDK. A
+   * repeat init after a JS bundle reload counts as success.
+   */
   private async initializeAndroidSdk(appId: string, appSecret: string): Promise<void> {
     const models = NativeModules.EdgeSpeechModels
     if (!models?.initializeSdk) {
-      this.emitError('INIT_FAILED', 'EdgeSpeechModels native module is unavailable.')
+      this.failInitialization('EdgeSpeechModels native module is unavailable.')
       return
     }
     try {
@@ -177,7 +199,44 @@ class VoiceEngine {
       if (/already.*initialized/i.test(message)) {
         return
       }
-      this.emitError('INIT_FAILED', message)
+      this.failInitialization(message)
+    }
+  }
+
+  /**
+   * Mark initialization as failed: record the cause, drop back to uninitialized so
+   * a later initialize() can retry, and surface it via onError.
+   */
+  private failInitialization(message: string): void {
+    this.isInitialized = false
+    this.initFailureReason = message
+    this.emitError('INIT_FAILED', message)
+  }
+
+  /** NOT_INITIALIZED, naming the underlying init failure when there was one. */
+  private notInitializedError(): Error {
+    return this.makeError(
+      'NOT_INITIALIZED',
+      this.initFailureReason
+        ? `Switchboard SDK not initialized: ${this.initFailureReason}`
+        : 'Switchboard SDK not initialized. Call initialize() first.'
+    )
+  }
+
+  /**
+   * Android: block until the Kotlin init settles, then reject if it didn't succeed.
+   * initialize() is synchronous (EdgeSpeechProvider calls it from an effect) so it
+   * can't await the result itself — this is the first point where a caller can be
+   * told, and it runs before anything touches the engine. No-op on iOS, where
+   * initialize() already knows the outcome before it returns.
+   */
+  private async ensureAndroidInitialized(): Promise<void> {
+    if (Platform.OS !== 'android') {
+      return
+    }
+    await this.androidInitPromise
+    if (!this.isInitialized) {
+      throw this.notInitializedError()
     }
   }
 
@@ -208,8 +267,6 @@ class VoiceEngine {
     if (Platform.OS !== 'android') {
       return
     }
-    // Kotlin SDK init must finish before the engine is created.
-    await this.androidInitPromise
     if (this.androidModelPath) {
       return
     }
@@ -279,10 +336,55 @@ class VoiceEngine {
 
   // MARK: - Control
 
+  /**
+   * Android: enter MODE_IN_COMMUNICATION and route to a headset (else the
+   * loudspeaker) *before* the engine opens its streams — that, plus the
+   * voice-communication input preset, is what engages the hardware AEC. Best
+   * effort: a refused route change degrades echo cancellation but must not stop
+   * the session, so failures are swallowed rather than surfaced. No-op on iOS,
+   * where the SDK owns the audio session.
+   */
+  private async enableAndroidCommunicationRoute(): Promise<void> {
+    if (Platform.OS !== 'android') {
+      return
+    }
+    try {
+      await NativeModules.EdgeSpeechAudioSession?.enableCommunicationRoute()
+    } catch {
+      // Proceed without the route change; listening and TTS still work.
+    }
+  }
+
+  /**
+   * Android: restore the normal audio mode/route. Only once the graph is down —
+   * while it runs, the communication route is what keeps AEC engaged.
+   */
+  private disableAndroidCommunicationRoute(): void {
+    if (Platform.OS !== 'android') {
+      return
+    }
+    NativeModules.EdgeSpeechAudioSession?.disableCommunicationRoute()?.catch(() => {})
+  }
+
+  /**
+   * Start the engine — the single path shared by listen() and speak(), so the
+   * Android communication route is entered before the streams open either way.
+   */
+  private async startEngine(): Promise<void> {
+    await this.enableAndroidCommunicationRoute()
+    const res = this.ensureClient().callAction(this.engineId!, 'start', {})
+    if (res.error) {
+      throw this.makeError('LISTEN_FAILED', res.error.message)
+    }
+    this.isListening = true
+    this.setState('listening')
+  }
+
   async listen(): Promise<void> {
     if (!this.isInitialized) {
-      throw this.makeError('NOT_INITIALIZED', 'Switchboard SDK not initialized. Call initialize() first.')
+      throw this.notInitializedError()
     }
+    await this.ensureAndroidInitialized()
     await this.ensureAndroidMicPermission()
     await this.ensureAndroidModel()
     if (!this.engineId) {
@@ -291,12 +393,7 @@ class VoiceEngine {
     if (this.isListening) {
       return
     }
-    const res = this.ensureClient().callAction(this.engineId!, 'start', {})
-    if (res.error) {
-      throw this.makeError('LISTEN_FAILED', res.error.message)
-    }
-    this.isListening = true
-    this.setState('listening')
+    await this.startEngine()
   }
 
   async stopListening(): Promise<void> {
@@ -309,16 +406,18 @@ class VoiceEngine {
     }
     this.isListening = false
     this.isSpeaking = false
+    this.disableAndroidCommunicationRoute()
     this.setState('idle')
   }
 
   async speak(text: string): Promise<void> {
     if (!this.isInitialized) {
-      throw this.makeError('NOT_INITIALIZED', 'Switchboard SDK not initialized. Call initialize() first.')
+      throw this.notInitializedError()
     }
     if (!text) {
       return
     }
+    await this.ensureAndroidInitialized()
     await this.ensureAndroidMicPermission()
     await this.ensureAndroidModel()
     if (!this.engineId) {
@@ -328,12 +427,7 @@ class VoiceEngine {
     await this.ensureAndroidTtsModel()
     // Starting the engine also activates the mic + AEC needed for barge-in.
     if (!this.isListening) {
-      const startRes = this.ensureClient().callAction(this.engineId!, 'start', {})
-      if (startRes.error) {
-        throw this.makeError('LISTEN_FAILED', startRes.error.message)
-      }
-      this.isListening = true
-      this.setState('listening')
+      await this.startEngine()
     }
 
     const res = this.ensureClient().callAction('ttsNode', 'synthesize', { text })
@@ -404,9 +498,11 @@ class VoiceEngine {
     }
     this.engineId = res.result
 
-    // Enable VoiceProcessingIO (AEC). Must be set after creation via setValue —
+    // iOS: enable VoiceProcessingIO (AEC). Must be set after creation via setValue —
     // with one combined engine this keeps AEC active during TTS playback and
-    // prevents self-triggered barge-in.
+    // prevents self-triggered barge-in. The key does not exist in the Android SDK,
+    // where AEC comes from the input preset + communication route instead (see
+    // enableAndroidCommunicationRoute).
     client.setValue(this.engineId, 'voiceProcessingEnabled', true)
 
     // Android: load the Whisper model by path (iOS auto-loads its bundled model).
@@ -435,6 +531,7 @@ class VoiceEngine {
     this.engineId = null
     this.isListening = false
     this.isSpeaking = false
+    this.disableAndroidCommunicationRoute()
     // A new engine has a fresh, unloaded ttsNode — reload the voice on next speak.
     this.androidTtsLoaded = false
   }
@@ -448,14 +545,18 @@ class VoiceEngine {
    *   data: vadNode.speechEnded → sttNode.transcribe
    */
   private buildGraphConfig(): object {
+    const isAndroid = Platform.OS === 'android'
     // GPU off in the iOS Simulator (Metal crash) and on Android (no Metal; CPU only).
-    const useGPU = Platform.OS !== 'android' && !NativeEdgeSpeech.isSimulator()
+    const useGPU = !isAndroid && !NativeEdgeSpeech.isSimulator()
 
     return {
       type: 'Realtime',
       config: {
         microphoneEnabled: true,
         speakerEnabled: true,
+        // Android only: an Oboe stream parameter, so it must be set at creation —
+        // there is no iOS equivalent (VoiceProcessingIO covers it there).
+        ...(isAndroid ? { inputPreset: ANDROID_VOICE_COMMUNICATION_INPUT_PRESET } : {}),
         graph: {
           config: {
             sampleRate: this.config.sampleRate,
@@ -476,7 +577,10 @@ class VoiceEngine {
             {
               id: 'sttNode',
               type: 'Whisper.STT',
-              config: { useGPU },
+              // iOS auto-initializes the model bundled in the SDK framework. Android
+              // has none to auto-initialize, so `initializeModel` is left off there
+              // and createEngine() loads it by path instead (sttNode.loadModel).
+              config: { useGPU, ...(isAndroid ? {} : { initializeModel: true }) },
             },
             { id: 'ttsNode', type: 'Sherpa.TTS' },
             { id: 'monoToMultiChannelNode', type: 'MonoToMultiChannel' },
@@ -610,6 +714,7 @@ class VoiceEngine {
     this.isListening = false
     this.isSpeaking = false
     this.eventsWired = false
+    this.initFailureReason = null
     this.androidModelPath = null
     this.androidTtsLoaded = false
     this.androidInitPromise = null

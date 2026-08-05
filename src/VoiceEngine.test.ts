@@ -162,6 +162,16 @@ describe('VoiceEngine transport', () => {
     const sttNode = create.params.params.config.graph.nodes.find((n: any) => n.id === 'sttNode')
     expect(sttNode.config.useGPU).toBe(false)
   })
+
+  it('asks Whisper to initialize its bundled model (iOS has no loadModel call)', async () => {
+    voiceEngine.initialize('app-id', 'app-secret')
+    await voiceEngine.listen()
+
+    const create = findAction('createEngine')!
+    const sttNode = create.params.params.config.graph.nodes.find((n: any) => n.id === 'sttNode')
+    expect(sttNode.config.initializeModel).toBe(true)
+    expect(findAction('loadModel')).toBeUndefined()
+  })
 })
 
 describe('VoiceEngine Android platform branches', () => {
@@ -173,6 +183,10 @@ describe('VoiceEngine Android platform branches', () => {
   let prepareArchive: jest.Mock
   let initializeSdk: jest.Mock
   let checkPermission: jest.SpyInstance
+  let enableCommunicationRoute: jest.Mock
+  let disableCommunicationRoute: jest.Mock
+  /** Whether the engine had already been told to start when the route was entered. */
+  let startSentBeforeRoute: boolean | null
 
   const ttsLoadCall = () =>
     sentCalls().find(
@@ -187,6 +201,15 @@ describe('VoiceEngine Android platform branches', () => {
     prepareArchive = jest.fn().mockResolvedValue(TTS_BASE)
     initializeSdk = jest.fn().mockResolvedValue(null)
     RN.NativeModules.EdgeSpeechModels = { prepareModel, prepareArchive, initializeSdk }
+    startSentBeforeRoute = null
+    enableCommunicationRoute = jest.fn(async () => {
+      startSentBeforeRoute = findAction('start') !== undefined
+    })
+    disableCommunicationRoute = jest.fn().mockResolvedValue(null)
+    RN.NativeModules.EdgeSpeechAudioSession = {
+      enableCommunicationRoute,
+      disableCommunicationRoute,
+    }
     // Mic-permission gate: default to granted so the existing listen/speak tests pass.
     checkPermission = jest.spyOn(RN.PermissionsAndroid, 'check').mockResolvedValue(true)
   })
@@ -194,6 +217,7 @@ describe('VoiceEngine Android platform branches', () => {
   afterEach(() => {
     RN.Platform.OS = originalOS
     delete RN.NativeModules.EdgeSpeechModels
+    delete RN.NativeModules.EdgeSpeechAudioSession
     jest.restoreAllMocks()
   })
 
@@ -206,6 +230,104 @@ describe('VoiceEngine Android platform branches', () => {
     const create = findAction('createEngine')!
     const sttNode = create.params.params.config.graph.nodes.find((n: any) => n.id === 'sttNode')
     expect(sttNode.config.useGPU).toBe(false)
+  })
+
+  it('omits initializeModel on Android — the model is loaded by path instead', async () => {
+    RN.Platform.OS = 'android'
+    voiceEngine.initialize('app-id', 'app-secret')
+    await voiceEngine.listen()
+
+    const create = findAction('createEngine')!
+    const sttNode = create.params.params.config.graph.nodes.find((n: any) => n.id === 'sttNode')
+    expect(sttNode.config.initializeModel).toBeUndefined()
+  })
+
+  it('opens the mic as voice-communication on Android (AEC input preset)', async () => {
+    RN.Platform.OS = 'android'
+    voiceEngine.initialize('app-id', 'app-secret')
+    await voiceEngine.listen()
+
+    // 7 = oboe InputPreset.VoiceCommunication. An Oboe stream parameter, so it has
+    // to be in the creation config — it cannot be applied later.
+    expect(findAction('createEngine')!.params.params.config.inputPreset).toBe(7)
+  })
+
+  it('does not send an inputPreset on iOS (no Oboe; VoiceProcessingIO covers AEC)', async () => {
+    RN.Platform.OS = 'ios'
+    voiceEngine.initialize('app-id', 'app-secret')
+    await voiceEngine.listen()
+
+    expect(findAction('createEngine')!.params.params.config.inputPreset).toBeUndefined()
+  })
+
+  it('enters the communication route BEFORE the engine opens its streams', async () => {
+    RN.Platform.OS = 'android'
+    voiceEngine.initialize('app-id', 'app-secret')
+    await voiceEngine.listen()
+
+    expect(enableCommunicationRoute).toHaveBeenCalledTimes(1)
+    // The whole point: MODE_IN_COMMUNICATION has to be set before the mic stream
+    // opens, or the hardware AEC isn't engaged for it.
+    expect(startSentBeforeRoute).toBe(false)
+    expect(findAction('start')).toBeDefined()
+  })
+
+  it('enters the communication route for speak() too (TTS needs AEC for barge-in)', async () => {
+    RN.Platform.OS = 'android'
+    voiceEngine.initialize('app-id', 'app-secret')
+    await voiceEngine.speak('hello')
+
+    expect(enableCommunicationRoute).toHaveBeenCalledTimes(1)
+    expect(startSentBeforeRoute).toBe(false)
+  })
+
+  it('restores the route on stopListening, only after the graph is down', async () => {
+    RN.Platform.OS = 'android'
+    voiceEngine.initialize('app-id', 'app-secret')
+    await voiceEngine.listen()
+    expect(disableCommunicationRoute).not.toHaveBeenCalled()
+
+    await voiceEngine.stopListening()
+
+    expect(disableCommunicationRoute).toHaveBeenCalledTimes(1)
+    expect(findAction('stop')).toBeDefined()
+  })
+
+  it('keeps the comm route while only TTS stops — the engine is still listening', async () => {
+    RN.Platform.OS = 'android'
+    voiceEngine.initialize('app-id', 'app-secret')
+    await voiceEngine.speak('hello')
+    await voiceEngine.stopSpeaking()
+
+    expect(disableCommunicationRoute).not.toHaveBeenCalled()
+  })
+
+  it('a refused route change degrades AEC but does not fail listen()', async () => {
+    RN.Platform.OS = 'android'
+    enableCommunicationRoute.mockRejectedValue(new Error('audio_session_error'))
+    voiceEngine.initialize('app-id', 'app-secret')
+
+    await expect(voiceEngine.listen()).resolves.toBeUndefined()
+    expect(findAction('start')).toBeDefined()
+  })
+
+  it('survives an app without the audio-session module registered', async () => {
+    RN.Platform.OS = 'android'
+    delete RN.NativeModules.EdgeSpeechAudioSession
+    voiceEngine.initialize('app-id', 'app-secret')
+
+    await expect(voiceEngine.listen()).resolves.toBeUndefined()
+    await expect(voiceEngine.stopListening()).resolves.toBeUndefined()
+  })
+
+  it('never touches the audio session on iOS (the SDK owns it)', async () => {
+    RN.Platform.OS = 'ios'
+    voiceEngine.initialize('app-id', 'app-secret')
+    await voiceEngine.listen()
+    await voiceEngine.stopListening()
+
+    expect(enableCommunicationRoute).not.toHaveBeenCalled()
+    expect(disableCommunicationRoute).not.toHaveBeenCalled()
   })
 
   it('calls loadModel on the Whisper node with the resolved path on Android', async () => {
@@ -232,12 +354,73 @@ describe('VoiceEngine Android platform branches', () => {
     expect(prepareModel).toHaveBeenCalledWith('models/whisper/ggml-tiny.en.bin')
   })
 
-  it('surfaces MODEL_UNAVAILABLE when the native models module is missing', async () => {
+  it('rejects with the init cause when the native models module is missing', async () => {
     RN.Platform.OS = 'android'
     delete RN.NativeModules.EdgeSpeechModels
+    const errors: Array<{ code: string; message: string }> = []
+    voiceEngine.addListener('onError', (e) => errors.push(e))
+
     voiceEngine.initialize('app-id', 'app-secret')
 
+    expect(errors).toEqual([
+      { code: 'INIT_FAILED', message: 'EdgeSpeechModels native module is unavailable.' },
+    ])
     await expect(voiceEngine.listen()).rejects.toThrow(/EdgeSpeechModels native module/i)
+  })
+
+  it('a failed Kotlin init leaves the engine uninitialized — listen() rejects, no engine', async () => {
+    RN.Platform.OS = 'android'
+    initializeSdk.mockRejectedValue(new Error('bad credentials'))
+    const errors: Array<{ code: string; message: string }> = []
+    voiceEngine.addListener('onError', (e) => errors.push(e))
+
+    // initialize() is sync and can't await the Kotlin call, so the failure only
+    // lands once listen() awaits it — it must not build a graph on a dead SDK.
+    voiceEngine.initialize('app-id', 'app-secret')
+
+    await expect(voiceEngine.listen()).rejects.toMatchObject({
+      code: 'NOT_INITIALIZED',
+      message: expect.stringContaining('bad credentials'),
+    })
+    expect(errors).toEqual([{ code: 'INIT_FAILED', message: 'bad credentials' }])
+    expect(findAction('createEngine')).toBeUndefined()
+    expect(prepareModel).not.toHaveBeenCalled()
+  })
+
+  it('a failed Kotlin init also blocks speak()', async () => {
+    RN.Platform.OS = 'android'
+    initializeSdk.mockRejectedValue(new Error('bad credentials'))
+    voiceEngine.initialize('app-id', 'app-secret')
+
+    await expect(voiceEngine.speak('hello')).rejects.toMatchObject({ code: 'NOT_INITIALIZED' })
+    expect(findAction('createEngine')).toBeUndefined()
+  })
+
+  it('initialize() can retry after a failed Kotlin init', async () => {
+    RN.Platform.OS = 'android'
+    initializeSdk.mockRejectedValueOnce(new Error('transient failure'))
+    voiceEngine.initialize('app-id', 'app-secret')
+    await expect(voiceEngine.listen()).rejects.toMatchObject({ code: 'NOT_INITIALIZED' })
+
+    // The failure cleared isInitialized, so a second initialize() is not a no-op.
+    voiceEngine.initialize('app-id', 'app-secret')
+    await voiceEngine.listen()
+
+    expect(initializeSdk).toHaveBeenCalledTimes(2)
+    expect(findAction('createEngine')).toBeDefined()
+  })
+
+  it('treats a Kotlin "already initialized" reload as success', async () => {
+    RN.Platform.OS = 'android'
+    initializeSdk.mockRejectedValue(new Error('Switchboard has already been initialized'))
+    const errors: unknown[] = []
+    voiceEngine.addListener('onError', (e) => errors.push(e))
+
+    voiceEngine.initialize('app-id', 'app-secret')
+    await voiceEngine.listen()
+
+    expect(errors).toEqual([])
+    expect(findAction('createEngine')).toBeDefined()
   })
 
   it('does not call loadModel on iOS (model bundled in the SDK framework)', async () => {
