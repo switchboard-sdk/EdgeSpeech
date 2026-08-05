@@ -24,6 +24,12 @@ function findAction(actionName: string): RpcCall | undefined {
   return sentCalls().find((c) => c.method === 'callAction' && c.params?.actionName === actionName)
 }
 
+/** How many times an action was called — for the concurrency tests. */
+function countAction(actionName: string): number {
+  return sentCalls().filter((c) => c.method === 'callAction' && c.params?.actionName === actionName)
+    .length
+}
+
 beforeEach(() => {
   native.resetNativeMock()
   voiceEngine._cleanup()
@@ -462,6 +468,92 @@ describe('VoiceEngine Android platform branches', () => {
 
     expect(prepareArchive).not.toHaveBeenCalled()
     expect(ttsLoadCall()).toBeUndefined()
+  })
+
+  // The Android prep suspends before the engine is touched, so these cover what
+  // that window can do: two taps racing, and a Stop landing inside it.
+
+  it('two concurrent listen() calls start the engine exactly once', async () => {
+    RN.Platform.OS = 'android'
+    voiceEngine.initialize('app-id', 'app-secret')
+
+    await Promise.all([voiceEngine.listen(), voiceEngine.listen()])
+
+    // Both calls clear the async prep, then the first runs its critical section to
+    // completion (isListening = true) before the second is scheduled.
+    expect(countAction('createEngine')).toBe(1)
+    expect(countAction('start')).toBe(1)
+  })
+
+  it('two concurrent speak() calls start the engine and load the voice once', async () => {
+    RN.Platform.OS = 'android'
+    voiceEngine.initialize('app-id', 'app-secret')
+
+    await Promise.all([voiceEngine.speak('one'), voiceEngine.speak('two')])
+
+    expect(countAction('start')).toBe(1)
+    expect(countAction('loadModel')).toBe(2) // sttNode + ttsNode, once each
+    expect(countAction('synthesize')).toBe(2) // both utterances still queued
+  })
+
+  it('a stopListening() during the Android prep cancels the pending listen()', async () => {
+    RN.Platform.OS = 'android'
+    // Park the prep on the model copy, and signal when it gets there — the test has
+    // to wait for that, not just for a microtask tick.
+    let releaseModel: (path: string) => void = () => {}
+    let announceModelStep: () => void = () => {}
+    const reachedModelStep = new Promise<void>((resolve) => {
+      announceModelStep = resolve
+    })
+    prepareModel.mockImplementation(
+      () =>
+        new Promise<string>((resolve) => {
+          releaseModel = resolve
+          announceModelStep()
+        })
+    )
+    voiceEngine.initialize('app-id', 'app-secret')
+
+    const pending = voiceEngine.listen()
+    await reachedModelStep
+    // No engine exists yet, so this cannot stop anything — it records the intent.
+    await voiceEngine.stopListening()
+    releaseModel(ANDROID_MODEL_PATH)
+    await pending
+
+    // The user asked for it to stop before it ever started: no mic.
+    expect(findAction('createEngine')).toBeUndefined()
+    expect(findAction('start')).toBeUndefined()
+    // And the route the prep took is handed back.
+    expect(disableCommunicationRoute).toHaveBeenCalledTimes(1)
+
+    // The request is spent — the next listen() starts normally (the model path
+    // resolved before the cancel, so it is already cached).
+    await voiceEngine.listen()
+    expect(findAction('start')).toBeDefined()
+  })
+
+  it('listen() runs start-to-finish synchronously on iOS (as it did before Android)', async () => {
+    RN.Platform.OS = 'ios'
+    voiceEngine.initialize('app-id', 'app-secret')
+
+    const pending = voiceEngine.listen() // deliberately not awaited
+
+    // No await ran, so the engine is already up: iOS never sees the prep window,
+    // which is what keeps it byte-for-byte on its pre-Android behaviour.
+    expect(findAction('createEngine')).toBeDefined()
+    expect(findAction('start')).toBeDefined()
+    await pending
+  })
+
+  it('speak() runs start-to-finish synchronously on iOS', async () => {
+    RN.Platform.OS = 'ios'
+    voiceEngine.initialize('app-id', 'app-secret')
+
+    const pending = voiceEngine.speak('hello')
+
+    expect(findAction('synthesize')).toBeDefined()
+    await pending
   })
 
   it('requestMicrophonePermission uses PermissionsAndroid (not the native hook) on Android', async () => {

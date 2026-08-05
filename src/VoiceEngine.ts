@@ -104,6 +104,17 @@ class VoiceEngine {
   /** Whether the Sherpa TTS voice has been loaded into the ttsNode (Android). */
   private androidTtsLoaded = false
 
+  /** filesDir root the TTS voice zip was extracted to (Android; see stageAndroidTtsVoice). */
+  private androidTtsDir: string | null = null
+
+  /**
+   * Android: a stopListening() that arrived while listen()/speak() was still in
+   * its async prep, when there is no engine to stop yet. The pending start reads
+   * it in its synchronous section and aborts, so the mic never opens after the
+   * user asked it not to. iOS has no prep, hence no window — see below.
+   */
+  private androidStopRequested = false
+
   /**
    * Pending Kotlin SDK init on Android. Awaited (and its outcome checked) by
    * ensureAndroidInitialized() before the engine is created.
@@ -294,9 +305,14 @@ class VoiceEngine {
     }
   }
 
-  /** Android: extract the TTS voice to filesDir (once) and load it into ttsNode via `loadModel`. iOS no-op (bundled). */
-  private async ensureAndroidTtsModel(): Promise<void> {
-    if (Platform.OS !== 'android' || this.androidTtsLoaded) {
+  /**
+   * Android: extract the TTS voice to filesDir (once) and cache its root. Only the
+   * extraction — handing the voice to the ttsNode is a synchronous action and lives
+   * in loadAndroidTtsVoice(), so it can stay inside speak()'s critical section.
+   * iOS no-op (voices ship in the SDK framework).
+   */
+  private async stageAndroidTtsVoice(): Promise<void> {
+    if (Platform.OS !== 'android' || this.androidTtsLoaded || this.androidTtsDir) {
       return
     }
     const voice = ANDROID_TTS_VOICES[this.config.ttsVoice]
@@ -313,16 +329,33 @@ class VoiceEngine {
         'EdgeSpeechModels native module is unavailable — cannot resolve the TTS voice path on Android.'
       )
     }
-    let base: string
     try {
-      base = await models.prepareArchive(voice.zipAsset, ANDROID_TTS_EXTRACT_DIR)
+      this.androidTtsDir = await models.prepareArchive(voice.zipAsset, ANDROID_TTS_EXTRACT_DIR)
     } catch (e) {
       throw this.makeError(
         'TTS_MODEL_LOAD_FAILED',
         `Failed to extract TTS voice '${voice.zipAsset}': ${(e as Error)?.message ?? String(e)}`
       )
     }
-    const dir = `${base}/${voice.voiceDir}`
+  }
+
+  /**
+   * Android: load the staged voice into the ttsNode. Synchronous (a plain
+   * callAction), so speak() can do it without suspending. Re-runs after
+   * destroyEngine(), which leaves a fresh, unloaded ttsNode behind.
+   */
+  private loadAndroidTtsVoice(): void {
+    if (Platform.OS !== 'android' || this.androidTtsLoaded) {
+      return
+    }
+    const voice = ANDROID_TTS_VOICES[this.config.ttsVoice]
+    if (!voice || !this.androidTtsDir) {
+      throw this.makeError(
+        'TTS_VOICE_UNAVAILABLE',
+        `TTS voice '${this.config.ttsVoice}' was not staged before speak().`
+      )
+    }
+    const dir = `${this.androidTtsDir}/${voice.voiceDir}`
     const res = this.ensureClient().callAction('ttsNode', 'loadModel', {
       modelPath: `${dir}/${voice.modelFile}`,
       tokensPath: `${dir}/tokens.txt`,
@@ -335,6 +368,16 @@ class VoiceEngine {
   }
 
   // MARK: - Control
+  //
+  // Shape of listen()/speak(): a synchronous guard, then Android's async prep
+  // behind a synchronous platform check, then a synchronous critical section
+  // (listenSync/speakSync) that is a copy of what these methods were before
+  // Android arrived. The suffix is load-bearing: JS is single-threaded, so a block
+  // containing no `await` cannot interleave with a concurrent caller, which is why
+  // a double tap can't start the engine twice. Never add an `await` to one of the
+  // *Sync methods — hoist the work into the prep instead. On iOS the platform
+  // check is false, so no `await` ever executes and the whole call runs
+  // start-to-finish synchronously, exactly as it did before this branch.
 
   /**
    * Android: enter MODE_IN_COMMUNICATION and route to a headset (else the
@@ -367,11 +410,42 @@ class VoiceEngine {
   }
 
   /**
-   * Start the engine — the single path shared by listen() and speak(), so the
-   * Android communication route is entered before the streams open either way.
+   * Android: everything a start needs that can only be done asynchronously —
+   * awaiting the Kotlin SDK init, checking the mic grant, materializing the model
+   * assets, entering the communication route. Runs before the critical sections,
+   * never inside them. Called only from the Android branch of listen()/speak().
+   *
+   * @param stageTtsVoice also extract the TTS voice (speak() only).
    */
-  private async startEngine(): Promise<void> {
+  private async prepareAndroidSession(stageTtsVoice = false): Promise<void> {
+    // A new start attempt supersedes any Stop left over from the last one.
+    this.androidStopRequested = false
+    await this.ensureAndroidInitialized()
+    await this.ensureAndroidMicPermission()
+    await this.ensureAndroidModel()
+    if (stageTtsVoice) {
+      await this.stageAndroidTtsVoice()
+    }
     await this.enableAndroidCommunicationRoute()
+  }
+
+  /**
+   * Whether a stopListening() landed during the Android prep, in which case the
+   * pending start must abort. Clears the request as it reports it, and gives back
+   * the communication route the prep took — nothing is going to use it. No state
+   * event: nothing had moved off `idle`, so there is nothing to correct.
+   */
+  private startWasCancelled(): boolean {
+    if (!this.androidStopRequested) {
+      return false
+    }
+    this.androidStopRequested = false
+    this.disableAndroidCommunicationRoute()
+    return true
+  }
+
+  /** Start the engine. Synchronous — the Android route is entered during prep. */
+  private startEngineSync(): void {
     const res = this.ensureClient().callAction(this.engineId!, 'start', {})
     if (res.error) {
       throw this.makeError('LISTEN_FAILED', res.error.message)
@@ -384,20 +458,33 @@ class VoiceEngine {
     if (!this.isInitialized) {
       throw this.notInitializedError()
     }
-    await this.ensureAndroidInitialized()
-    await this.ensureAndroidMicPermission()
-    await this.ensureAndroidModel()
+    if (Platform.OS === 'android') {
+      await this.prepareAndroidSession()
+    }
+    this.listenSync()
+  }
+
+  /** listen()'s critical section. Must contain no `await` — see the note above. */
+  private listenSync(): void {
+    if (this.startWasCancelled()) {
+      return
+    }
     if (!this.engineId) {
       this.createEngine()
     }
     if (this.isListening) {
       return
     }
-    await this.startEngine()
+    this.startEngineSync()
   }
 
   async stopListening(): Promise<void> {
     if (!this.engineId || !this.isListening) {
+      // Nothing to stop yet. On Android that can mean a start is mid-prep, so
+      // record the intent for its critical section to honour.
+      if (Platform.OS === 'android') {
+        this.androidStopRequested = true
+      }
       return
     }
     const res = this.ensureClient().callAction(this.engineId, 'stop', {})
@@ -417,17 +504,25 @@ class VoiceEngine {
     if (!text) {
       return
     }
-    await this.ensureAndroidInitialized()
-    await this.ensureAndroidMicPermission()
-    await this.ensureAndroidModel()
+    if (Platform.OS === 'android') {
+      await this.prepareAndroidSession(true)
+    }
+    this.speakSync(text)
+  }
+
+  /** speak()'s critical section. Must contain no `await` — see the note above. */
+  private speakSync(text: string): void {
+    if (this.startWasCancelled()) {
+      return
+    }
     if (!this.engineId) {
       this.createEngine()
     }
     // Load the TTS voice lazily on first speak (Android; iOS auto-loads it).
-    await this.ensureAndroidTtsModel()
+    this.loadAndroidTtsVoice()
     // Starting the engine also activates the mic + AEC needed for barge-in.
     if (!this.isListening) {
-      await this.startEngine()
+      this.startEngineSync()
     }
 
     const res = this.ensureClient().callAction('ttsNode', 'synthesize', { text })
@@ -717,6 +812,8 @@ class VoiceEngine {
     this.initFailureReason = null
     this.androidModelPath = null
     this.androidTtsLoaded = false
+    this.androidTtsDir = null
+    this.androidStopRequested = false
     this.androidInitPromise = null
     this.config = {
       vadSensitivity: 0.5,
