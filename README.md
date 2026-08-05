@@ -61,14 +61,26 @@ works in both Expo (prebuild) and bare React Native apps — it does **not** use
 - **Expo:** set `"newArchEnabled": true` in `app.json` (the default in recent Expo SDKs).
 - **Bare RN:** the default from RN 0.76+ (for older setups, `RCT_NEW_ARCH_ENABLED=1` at `pod install`).
 
-**2. Add microphone permission** to your `Info.plist` (or via `app.json` `infoPlist` on Expo):
+**2. Set your app identifiers** (Expo only). `expo run:ios` / `expo run:android` prebuild your
+native projects, and prebuild fails without them — a fresh `create-expo-app` project has neither:
+
+```json
+{
+  "expo": {
+    "ios": { "bundleIdentifier": "com.yourcompany.yourapp" },
+    "android": { "package": "com.yourcompany.yourapp" }
+  }
+}
+```
+
+**3. Add microphone permission** to your `Info.plist` (or via `app.json` `infoPlist` on Expo):
 
 ```xml
 <key>NSMicrophoneUsageDescription</key>
 <string>This app needs microphone access for voice input</string>
 ```
 
-**3. Build:**
+**4. Build:**
 
 ```bash
 npx expo run:ios
@@ -99,7 +111,8 @@ Add the config plugin to `app.json` — **before** prebuilding, since prebuild i
 {
   "expo": {
     "newArchEnabled": true,
-    "plugins": ["@synervoz/edgespeech"]
+    "plugins": ["@synervoz/edgespeech"],
+    "android": { "package": "com.yourcompany.yourapp" }
   }
 }
 ```
