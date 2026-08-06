@@ -2,12 +2,28 @@
 
 The app has two sections: **Voice Input** for transcription (tap "Start Listening", speak, watch the transcript appear) and **Text-to-Speech** (type text, tap "Speak"). Enable **Conversation Mode** to wire them together automatically: speech is transcribed, sent to an LLM, and the response is spoken back.
 
+Runs on **iOS and Android**.
+
+> [!NOTE]
+> This is an **Expo** app using [prebuild](https://docs.expo.dev/workflow/prebuild/): `ios/` and
+> `android/` are generated from `app.json` (plus EdgeSpeech's config plugin) rather than checked in,
+> so `expo run:*` creates them on first use. EdgeSpeech ships native code, so it needs a development
+> build — it does **not** run in Expo Go.
+
 ## Prerequisites
 
 - Node.js 20+
+- Switchboard SDK credentials ([sign up here](https://console.switchboard.audio/register))
+
+For iOS:
+
 - Xcode 16.1+
 - Physical iOS device (microphone required for voice features)
-- Switchboard SDK credentials ([sign up here](https://console.switchboard.audio/register))
+
+For Android:
+
+- Android Studio, with **NDK 29.0.14206865** installed (see [Run on Android](#run-on-android))
+- Physical device, or an `x86_64` emulator
 
 ## Setup
 
@@ -18,7 +34,8 @@ npm install
 npm run build
 ```
 
-Install example app dependencies (this also downloads the Switchboard SDK frameworks):
+Install example app dependencies (this also downloads the Switchboard SDK frameworks and the
+Android models — around 1.9 GB in total, so expect it to take a while):
 
 ```bash
 cd example
@@ -31,15 +48,19 @@ Copy the environment file and add your credentials:
 cp .env.example .env
 ```
 
-Edit `.env` with your Switchboard App ID and App Secret.
+Edit `.env` with your Switchboard App ID and App Secret. Demo credentials are included, so this
+works as-is for a first run.
 
-Set up iOS code signing for your device:
+## Run on iOS
+
+Set up iOS code signing for your device.
 
 Follow [these instructions first](https://docs.expo.dev/get-started/set-up-your-environment/?platform=ios&device=physical&mode=development-build&buildEnv=local).
 
-1. Open the Xcode workspace:
+1. Generate the native project, then open the Xcode workspace:
 
    ```bash
+   npx expo prebuild --platform ios
    open ios/SwitchboardVoiceExample.xcworkspace
    ```
 
@@ -64,3 +85,34 @@ npx expo run:ios --device
 - If you see a prompt "codesign wants to access key '...' in your keychain", fill in the password field with your MacOS login password and click "Always Allow" to let Xcode sign the app.
 - You may see the development dashboard appear with a message "no development servers"
 - Scan the QR code in the terminal with your iOS device to open the app.
+
+## Run on Android
+
+Install NDK r29 first — the Switchboard native libraries need a libc++ symbol that the template's
+default r27 doesn't export, so on r27 the app builds and installs but dies at launch:
+
+```bash
+"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;29.0.14206865"
+```
+
+Or from Android Studio: **SDK Manager → SDK Tools → NDK (Side by side) → 29.0.14206865**.
+
+Then build and run:
+
+```bash
+npx expo run:android
+```
+
+No code signing needed. The app asks for microphone permission on the first "Start Listening" —
+grant it, or voice input fails with a permission error.
+
+The build prints the NDK it used, so you can confirm the config plugin applied:
+
+```
+[ExpoRootProject]  - ndk:  29.0.14206865
+```
+
+> [!TIP]
+> If a build fails oddly after changing `app.json` or the library's config plugin, regenerate the
+> native projects with `npx expo prebuild --clean` — they are build output, so deleting and
+> regenerating them is safe.
