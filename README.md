@@ -89,9 +89,8 @@ in your app's native build, so the app resolves the Switchboard AARs itself), dr
 
 **3. Configure `app.json`** (Expo — for bare React Native, skip to
 [Bare React Native](#bare-react-native)). Add the config plugin **before** prebuilding, since
-prebuild is what applies it. It takes no options and does all four Android settings for you (Maven
-repo, Prefab, NDK 29, legacy packaging + dropping `x86`), so you don't need
-`expo-build-properties`:
+prebuild is what applies it. It takes no options and does the Android setup for you (Maven repo,
+Prefab, NDK 29, legacy packaging, dropping `x86`), so you don't need `expo-build-properties`:
 
 ```json
 {
