@@ -1,11 +1,10 @@
 // React Native Android library module for EdgeSpeech.
 //
-// Provides codegen for the TurboModule spec and the Switchboard SDK + extension
-// dependencies. The shared C++ TurboModule (../cpp) is compiled and registered
-// in the *consuming app's* native build via RN's C++ autolinking — see
-// react-native.config.js (android cxx* keys) and android/CMakeLists.txt. The app
-// therefore links Switchboard through Prefab; this module just makes the AARs
-// (and their Prefab packages) available to it via `api`.
+// The shared C++ TurboModule (../cpp) is compiled and registered in the
+// *consuming app's* native build via RN's C++ autolinking — see
+// react-native.config.js (android cxx* keys) and android/CMakeLists.txt. This
+// module provides codegen for the spec and makes the Switchboard AARs (and
+// their Prefab packages) available to the app via `api`.
 apply plugin: "com.android.library"
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
@@ -17,13 +16,10 @@ def safeExtGet(prop, fallback) {
 // Matches the iOS SDK version (scripts/postinstall.js SDK_VERSION = release/3.2.3).
 def switchboardSdkVersion = "3.2.3"
 
-// The Switchboard C++ TurboModule is compiled in the *app's* native build (RN
-// C++ autolinking), so the app must (a) know the Switchboard Maven repo and
-// (b) enable Prefab. The app declares both itself: bare RN via the README's
-// Android setup snippet, Expo via this package's config plugin (app.plugin.js).
-// We don't inject them across projects from here — Gradle's Project Isolation
-// forbids configuring another project, and the injection landed too late under
-// Expo's configuration ordering anyway.
+// The app declares the Maven repo and Prefab itself (bare RN via the README's
+// Android setup snippet, Expo via app.plugin.js). We don't inject them from here:
+// Gradle's Project Isolation forbids configuring another project, and the
+// injection landed too late under Expo's configuration ordering anyway.
 
 react {
     // Codegen reads the TurboModule spec from the package's TS sources and
