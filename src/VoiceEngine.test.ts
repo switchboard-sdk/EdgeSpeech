@@ -351,13 +351,33 @@ describe('VoiceEngine Android platform branches', () => {
     expect(sttNode.config.modelPath).toBeUndefined()
   })
 
-  it('selects the tiny model asset when sttModel is whisper-tiny-en', async () => {
+  it('ignores a configure() after the engine is built — models are chosen once', async () => {
     RN.Platform.OS = 'android'
     voiceEngine.initialize('app-id', 'app-secret')
-    voiceEngine.configure({ sttModel: 'whisper-tiny-en' })
-    await voiceEngine.listen()
+    await voiceEngine.speak('hello')
+    const loadsBefore = countAction('loadModel')
 
-    expect(prepareModel).toHaveBeenCalledWith('models/whisper/ggml-tiny.en.bin')
+    // Configure-once by design: the nodes load their models when the engine is
+    // built, so a later change must not half-apply (new path resolved, node still
+    // on the old model). Nothing reloads, and nothing is re-resolved.
+    voiceEngine.configure({ sttModel: 'whisper-tiny-en', ttsVoice: 'de_DE' })
+    await voiceEngine.speak('again')
+
+    expect(countAction('loadModel')).toBe(loadsBefore)
+    expect(prepareModel).toHaveBeenCalledTimes(1)
+    expect(prepareArchive).toHaveBeenCalledTimes(1)
+  })
+
+  it('rejects an sttModel that is not bundled, without opening the mic', async () => {
+    RN.Platform.OS = 'android'
+    voiceEngine.initialize('app-id', 'app-secret')
+    // Android ships exactly the model the iOS framework bundles — nothing else
+    // resolves, so asking for one fails loudly rather than silently using base.
+    voiceEngine.configure({ sttModel: 'whisper-tiny-en' })
+
+    await expect(voiceEngine.listen()).rejects.toMatchObject({ code: 'MODEL_UNAVAILABLE' })
+    expect(prepareModel).not.toHaveBeenCalled()
+    expect(findAction('start')).toBeUndefined()
   })
 
   it('rejects with the init cause when the native models module is missing', async () => {

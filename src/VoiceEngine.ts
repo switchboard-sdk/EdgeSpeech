@@ -38,9 +38,10 @@ interface VoiceEngineConfig {
 }
 
 // Maps `sttModel` → bundled asset path (Android; iOS uses the SDK-framework model).
+// Deliberately the same single model the iOS framework ships, so `sttModel` means
+// the same thing on both platforms.
 const ANDROID_MODEL_ASSETS: Record<string, string> = {
   'whisper-base-en': 'models/whisper/ggml-base.en.bin',
-  'whisper-tiny-en': 'models/whisper/ggml-tiny.en.bin',
 }
 
 // Android Sherpa TTS voices keyed by `ttsVoice`: bundled zip + in-zip paths.
@@ -251,6 +252,13 @@ class VoiceEngine {
     }
   }
 
+  /**
+   * Apply configuration. `sttModel` and `ttsVoice` select which model files the
+   * nodes load, which happens once when the engine is built — so they take effect
+   * only if set before the first listen()/speak(), and changing them later is
+   * ignored on both platforms. Configure once, at mount. (`vadSensitivity`,
+   * `sampleRate` and `bufferSize` are likewise baked into the graph at creation.)
+   */
   configure(config: Record<string, unknown>): void {
     if (typeof config.vadSensitivity === 'number') {
       this.config.vadSensitivity = Math.max(0, Math.min(1, config.vadSensitivity))
@@ -265,11 +273,7 @@ class VoiceEngine {
       this.config.ttsVoice = config.ttsVoice
     }
     if (typeof config.sttModel === 'string' && config.sttModel.trim() !== '') {
-      if (config.sttModel !== this.config.sttModel) {
-        this.config.sttModel = config.sttModel
-        // Force the Android model path to re-resolve for the new model on next listen.
-        this.androidModelPath = null
-      }
+      this.config.sttModel = config.sttModel
     }
   }
 

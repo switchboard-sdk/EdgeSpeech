@@ -20,12 +20,13 @@ const S3 = 'https://switchboard-sdk-public.s3.amazonaws.com/assets/models'
 // Default target: the library module's own assets, merged into the app's APK at build.
 const DEFAULT_ASSETS_ROOT = path.join(__dirname, '..', 'android', 'src', 'main', 'assets')
 
-// Whisper STT ggml models + the default Sherpa TTS voice (en_GB). de_DE is
-// available at ${S3}/sherpa/tts/de_DE.zip — add it here to bundle it too.
+// Mirrors what the iOS frameworks bundle, so both platforms offer the same models:
+// Whisper base.en for STT, and the en_GB + de_DE Piper voices for TTS. Keep this
+// list in step with ANDROID_MODEL_ASSETS / ANDROID_TTS_VOICES in src/VoiceEngine.ts.
 const DOWNLOADS = [
   { url: `${S3}/whisper/ggml-base.en.bin`, rel: 'models/whisper/ggml-base.en.bin' },
-  { url: `${S3}/whisper/ggml-tiny.en.bin`, rel: 'models/whisper/ggml-tiny.en.bin' },
   { url: `${S3}/sherpa/tts/en_GB.zip`, rel: 'models/sherpa/tts/en_GB.zip' },
+  { url: `${S3}/sherpa/tts/de_DE.zip`, rel: 'models/sherpa/tts/de_DE.zip' },
 ]
 
 function remoteSize(url) {
