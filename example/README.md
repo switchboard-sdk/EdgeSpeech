@@ -23,7 +23,6 @@ For iOS:
 For Android:
 
 - Android Studio, with **NDK 29.0.14206865** installed (see [Run on Android](#run-on-android))
-- Physical device, or an `x86_64` emulator
 
 ## Setup
 
@@ -88,8 +87,7 @@ npx expo run:ios --device
 
 ## Run on Android
 
-Install NDK r29 first — the Switchboard native libraries need a libc++ symbol that the template's
-default r27 doesn't export, so on r27 the app builds and installs but dies at launch:
+Install NDK r29 first
 
 ```bash
 "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;29.0.14206865"
