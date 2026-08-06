@@ -149,7 +149,7 @@ In `android/build.gradle` — at the project level, matching how React Native's 
 ```gradle
 buildscript {
   ext {
-    ndkVersion = "29.0.14206865"   // not the template's 27.x
+    ndkVersion = "29.0.14206865"   // required by the Switchboard SDK
   }
 }
 

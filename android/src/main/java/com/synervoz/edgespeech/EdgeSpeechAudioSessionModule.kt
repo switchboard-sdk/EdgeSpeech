@@ -16,8 +16,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Manages the Android audio session while the engine runs: enters
- * MODE_IN_COMMUNICATION (engages the hardware AEC — Samsung keeps it off
- * otherwise) and routes to a connected headset, else the built-in loudspeaker
+ * MODE_IN_COMMUNICATION (engages the hardware AEC) and routes to a connected
+ * headset, else the built-in loudspeaker
  * (never the earpiece). Called from VoiceEngine.ts on start/stop; needs
  * MODIFY_AUDIO_SETTINGS. Route is fixed at start — no mid-call re-detection.
  */
