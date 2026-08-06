@@ -62,9 +62,10 @@ node node_modules/@synervoz/edgespeech/scripts/postinstall.js
 
 The second command is the `postinstall` script: it downloads the native Switchboard frameworks into
 `ios/Frameworks/` (~1.6 GB) and the Android models into `android/src/main/assets/` (~290 MB, merged
-into your APK) — they aren't bundled in the package. It runs automatically on `npm install`, but
-package managers that block install scripts (npm 11+ does by default) skip it, so run it once
-manually — nothing builds until it has.
+into your APK) — they aren't bundled in the package. Nothing builds until it has run.
+
+It runs automatically on `npm install`. Run it manually if your package manager skipped it — it
+re-checks the files and skips anything already downloaded, so it is safe to run at any time.
 
 Skip the models with `EDGESPEECH_SKIP_ANDROID_MODELS=1`; to re-fetch just those, run
 `node node_modules/@synervoz/edgespeech/scripts/download-android-models.js`.

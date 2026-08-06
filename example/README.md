@@ -41,6 +41,14 @@ cd example
 npm install
 ```
 
+> [!NOTE]
+> If the download is skipped (some package managers block install scripts), run it manually —
+> after the root `npm install`, since the script's dependencies live there:
+>
+> ```bash
+> node ../scripts/postinstall.js
+> ```
+
 Copy the environment file and add your credentials:
 
 ```bash
