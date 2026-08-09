@@ -64,10 +64,9 @@ const ANDROID_TTS_VOICES: Record<
 
 const ANDROID_TTS_EXTRACT_DIR = 'sherpa/tts'
 
-// Android AEC: open the mic as voice-communication. Pairs with MODE_IN_COMMUNICATION
-// (set natively on start — see EdgeSpeechAudioSessionModule). The engine's
-// `voiceProcessingEnabled` key is iOS-only (VoiceProcessingIO), so this and the
-// communication route are what engage echo cancellation on Android.
+// Android echo cancellation: open the mic as voice-communication, paired with the
+// MODE_IN_COMMUNICATION route set by EdgeSpeechAudioSessionModule on start. The
+// engine's `voiceProcessingEnabled` key is iOS-only, so these two are all we have.
 const ANDROID_VOICE_COMMUNICATION_INPUT_PRESET = 7 // oboe InputPreset.VoiceCommunication
 
 /**
@@ -155,11 +154,9 @@ class VoiceEngine {
 
     if (Platform.OS === 'android') {
       // Android inits via Kotlin (registers the PlatformInfoProvider → native-lib
-      // dir Whisper needs); listen()/speak() await it before creating the engine.
-      //
-      // Optimistic, and set BEFORE dispatching: initializeAndroidSdk() runs its
-      // first synchronous stretch during this assignment and clears the flag if it
-      // fails there, so setting it afterwards would resurrect a failed init.
+      // dir Whisper needs); listen()/speak() await the promise before building the
+      // engine. The flag is optimistic and must be set first — initializeAndroidSdk()
+      // clears it if it fails synchronously, so setting it after would undo that.
       this.isInitialized = true
       this.androidInitPromise = this.initializeAndroidSdk(appId, appSecret)
       return
@@ -310,9 +307,8 @@ class VoiceEngine {
   }
 
   /**
-   * Android: extract the TTS voice to filesDir (once) and cache its root. Only the
-   * extraction — handing the voice to the ttsNode is a synchronous action and lives
-   * in loadAndroidTtsVoice(), so it can stay inside speak()'s critical section.
+   * Android: extract the TTS voice to filesDir (once) and cache its root. Handing it
+   * to the ttsNode is a separate, synchronous step — loadAndroidTtsVoice().
    * iOS no-op (voices ship in the SDK framework).
    */
   private async stageAndroidTtsVoice(): Promise<void> {
@@ -373,18 +369,16 @@ class VoiceEngine {
 
   // MARK: - Control
   //
-  // listen()/speak() end in a *Sync critical section that must contain no `await` —
-  // hoist any async work into prepareAndroidSession() instead. JS is single-threaded,
-  // so an await-free block cannot interleave with a concurrent caller; that is what
-  // stops a double tap starting the engine twice. On iOS the platform check is false,
-  // so nothing awaits and the call runs start-to-finish synchronously, as in main.
+  // On Android, listen()/speak() do their async setup up front (prepareAndroidSession),
+  // then finish in a *Sync method with no `await` in it. Keep it that way: JS runs an
+  // await-free stretch to completion, which is what stops a double tap from starting
+  // the engine twice. iOS has nothing to await and runs straight through.
 
   /**
-   * Android: enter MODE_IN_COMMUNICATION and route to a headset (else the
-   * loudspeaker) *before* the engine opens its streams — that, plus the
-   * voice-communication input preset, is what engages the hardware AEC. Best effort:
-   * a refused change only degrades echo cancellation, so failures are swallowed.
-   * No-op on iOS, where the SDK owns the audio session.
+   * Android: switch to MODE_IN_COMMUNICATION and route to a headset (else the
+   * loudspeaker) before the engine opens its streams — this and the voice-communication
+   * input preset are what turn on the hardware AEC. Failures are ignored; the only cost
+   * is weaker echo cancellation. iOS no-op (the SDK owns the audio session).
    */
   private async enableAndroidCommunicationRoute(): Promise<void> {
     if (Platform.OS !== 'android') {
@@ -409,9 +403,8 @@ class VoiceEngine {
   }
 
   /**
-   * Android: everything a start needs that can only be done asynchronously —
-   * awaiting the Kotlin SDK init, checking the mic grant, materializing the model
-   * assets, entering the communication route.
+   * Android: all the async setup a start needs, gathered here so listen()/speak()
+   * can finish without awaiting anything.
    *
    * @param stageTtsVoice also extract the TTS voice (speak() only).
    */

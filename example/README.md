@@ -33,8 +33,8 @@ npm install
 npm run build
 ```
 
-Install example app dependencies (this also downloads the Switchboard SDK frameworks and the
-Android models — around 1.9 GB in total, so expect it to take a while):
+Install example app dependencies (this also downloads the iOS Switchboard SDK frameworks and the
+model files Android needs, which is a large download — expect it to take a while):
 
 ```bash
 cd example

@@ -54,13 +54,10 @@ function withNdkVersion(config) {
     const match = cfg.modResults.contents.match(declaration)
 
     if (!match) {
-      // Nothing to patch — the Expo template declares no ndkVersion. The block has
-      // to be INSERTED BEFORE `apply plugin: "expo-root-project"`, not appended:
-      // expo-root-project defaults ndkVersion to 27.x via setIfNotExist, so we only
-      // win by getting there first, and :app is configured *before* the root
-      // build.gradle body finishes, so a trailing statement is read too late however
-      // it is written. It can't be prepended to the file either — Gradle wants
-      // buildscript {} first — so anchor on the first plugin application.
+      // The Expo template declares no ndkVersion, so insert one — but it must land
+      // BEFORE `apply plugin: "expo-root-project"`, which defaults it to 27.x via
+      // setIfNotExist; appended is too late. Prepending isn't an option either
+      // (Gradle wants buildscript {} first), so anchor on the first plugin apply.
       const block = `ext { ndkVersion = "${MIN_NDK_VERSION}" }\n\n`
       const anchor = cfg.modResults.contents.indexOf('apply plugin:')
       if (anchor === -1) {
