@@ -218,6 +218,7 @@ const {
   // State
   transcript,              // string       — live interim transcript (clears on final)
   voiceState,              // 'idle' | 'listening' | 'processing' | 'speaking'
+  isInitializing,          // boolean      — Android: true until the models are ready
   error,                   // string | null
   hasMicrophonePermission, // boolean | null
 
@@ -233,3 +234,17 @@ const {
   onInterrupted,        // (cb: () => void) => void — fires when VAD interrupts TTS
 } = useEdgeSpeech()
 ```
+
+> [!NOTE]
+> On Android the STT/TTS models are copied out of the APK on first launch, which can take several
+> seconds on a slower device. `EdgeSpeechProvider` starts that as soon as it mounts and reports it via
+> `isInitializing`, so show a loading state while it is true. `listen()` and `speak()` wait for it
+> if called earlier, so they never fail because of it. Later launches reuse the copied files, and
+> on iOS `isInitializing` is always `false` — the models ship inside the SDK frameworks.
+
+Repeated calls are safe, so you don't need to guard the buttons yourself:
+
+- `listen()` while a start is already in progress is a no-op — the microphone is opened once.
+- `stopListening()` during a start cancels it, and the microphone is never opened.
+- `speak()` while speaking queues the new text rather than cutting off what is playing —
+  use `stopSpeaking()` for that.

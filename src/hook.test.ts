@@ -11,7 +11,7 @@ jest.mock('../src/SwitchboardVoiceModule', () => ({
   __esModule: true,
   default: {
     addListener: jest.fn(),
-    initialize: jest.fn(),
+    initialize: jest.fn(() => Promise.resolve()),
     configure: jest.fn(),
     listen: jest.fn(() => Promise.resolve()),
     stopListening: jest.fn(() => Promise.resolve()),
@@ -347,6 +347,38 @@ describe('useEdgeSpeech', () => {
         await result.current.requestMicrophonePermission()
       })
       expect(result.current.hasMicrophonePermission).toBe(true)
+    })
+  })
+
+  describe('isInitializing', () => {
+    const RN = require('react-native')
+    const originalOS = RN.Platform.OS
+
+    afterEach(() => {
+      RN.Platform.OS = originalOS
+    })
+
+    it('is false on iOS, which stages nothing', async () => {
+      RN.Platform.OS = 'ios'
+      const { result } = renderHook(() => useEdgeSpeech(), { wrapper })
+
+      expect(result.current.isInitializing).toBe(false)
+    })
+
+    it('is true on Android until the staging settles', async () => {
+      RN.Platform.OS = 'android'
+      let finishStaging: () => void = () => {}
+      jest
+        .mocked(SwitchboardVoiceModule.initialize)
+        .mockReturnValueOnce(new Promise<void>((resolve) => (finishStaging = resolve)))
+
+      const { result } = renderHook(() => useEdgeSpeech(), { wrapper })
+      expect(result.current.isInitializing).toBe(true)
+
+      await act(async () => {
+        finishStaging()
+      })
+      expect(result.current.isInitializing).toBe(false)
     })
   })
 })

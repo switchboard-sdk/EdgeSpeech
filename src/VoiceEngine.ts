@@ -62,6 +62,9 @@ const ANDROID_TTS_VOICES: Record<
   },
 }
 
+// Each voice extracts into its own root below this. prepareArchive() skips a directory
+// it has already filled, so sharing one across voices would let the first voice a device
+// staged block every other one.
 const ANDROID_TTS_EXTRACT_DIR = 'sherpa/tts'
 
 // Android echo cancellation: open the mic as voice-communication, paired with the
@@ -107,11 +110,13 @@ class VoiceEngine {
   /** filesDir root the TTS voice zip was extracted to (Android; see stageAndroidTtsVoice). */
   private androidTtsDir: string | null = null
 
+  /** The `ttsVoice` actually extracted there — fixed for the session, as on iOS. */
+  private androidTtsVoice: string | null = null
+
   /**
-   * Android: a stopListening() that arrived while listen()/speak() was still in
-   * its async prep, when there is no engine to stop yet. The pending start reads
-   * it in its synchronous section and aborts, so the mic never opens after the
-   * user asked it not to. iOS has no prep, hence no window — see below.
+   * Android: a stopListening() that arrived while listen()/speak() was still in its
+   * async prep, when there is no engine to stop yet. The pending start aborts on it, so
+   * the mic never opens after the user asked it not to. iOS has no prep, hence no window.
    */
   private androidStopRequested = false
 
@@ -144,9 +149,20 @@ class VoiceEngine {
 
   // MARK: - Lifecycle
 
-  initialize(appId: string, appSecret: string): void {
+  /**
+   * Start the SDK. The returned promise resolves once initialization has settled — on
+   * Android that includes the Kotlin init and the model staging — and never rejects: a
+   * credentials failure goes to onError and leaves the engine uninitialized, so the next
+   * listen()/speak() rejects instead.
+   *
+   * Deliberately not `async`: a broken native module is a setup error and must keep
+   * throwing synchronously, rather than becoming an unhandled rejection in the callers
+   * that ignore the promise (EdgeSpeechProvider's effect, EdgeSpeech.configure()).
+   */
+  initialize(appId: string, appSecret: string): Promise<void> {
     if (this.isInitialized) {
-      return
+      // Hand back an init already in flight rather than reporting it as settled.
+      return this.androidInitPromise ?? Promise.resolve()
     }
     const client = this.ensureClient()
     this.wireEvents()
@@ -158,8 +174,10 @@ class VoiceEngine {
       // engine. The flag is optimistic and must be set first — initializeAndroidSdk()
       // clears it if it fails synchronously, so setting it after would undo that.
       this.isInitialized = true
-      this.androidInitPromise = this.initializeAndroidSdk(appId, appSecret)
-      return
+      this.androidInitPromise = this.initializeAndroidSdk(appId, appSecret).then(() =>
+        this.stageAndroidAssets()
+      )
+      return this.androidInitPromise
     }
 
     const res = client.callAction('switchboard', 'initialize', {
@@ -177,16 +195,17 @@ class VoiceEngine {
       // code or an SDK init-state query would be more robust.
       if (/already.*initialized/i.test(message)) {
         this.isInitialized = true
-        return
+        return Promise.resolve()
       }
       // Surface genuine failures via onError and stay uninitialized (a later
       // listen()/speak() then rejects NOT_INITIALIZED). Don't throw:
       // EdgeSpeechProvider calls initialize() inside an effect, so throwing would
       // red-box the app instead of firing onError — matches the original module.
       this.failInitialization(message)
-      return
+      return Promise.resolve()
     }
     this.isInitialized = true
+    return Promise.resolve()
   }
 
   /**
@@ -209,6 +228,24 @@ class VoiceEngine {
         return
       }
       this.failInitialization(message)
+    }
+  }
+
+  /**
+   * Android: copy/unzip the model files during init, so the first listen()/speak() is
+   * not stalled by them. Reads the configured sttModel/ttsVoice, so configure() must
+   * run first (EdgeSpeechProvider does). A failure here is left for
+   * prepareAndroidSession() to retry and report.
+   */
+  private async stageAndroidAssets(): Promise<void> {
+    if (!this.isInitialized) {
+      return
+    }
+    try {
+      await this.ensureAndroidModel()
+      await this.stageAndroidTtsVoice()
+    } catch {
+      // Retried on the next listen()/speak(), which is where it reaches the caller.
     }
   }
 
@@ -250,11 +287,11 @@ class VoiceEngine {
   }
 
   /**
-   * Apply configuration. `sttModel` and `ttsVoice` select which model files the
-   * nodes load, which happens once when the engine is built — so they take effect
-   * only if set before the first listen()/speak(), and changing them later is
-   * ignored on both platforms. Configure once, at mount. (`vadSensitivity`,
-   * `sampleRate` and `bufferSize` are likewise baked into the graph at creation.)
+   * Apply configuration. `sttModel` and `ttsVoice` select which model files to load,
+   * so they must be set before initialize() — that is what stages them on Android.
+   * Changing them later is ignored on both platforms. Configure once, at mount.
+   * (`vadSensitivity`, `sampleRate` and `bufferSize` are baked into the graph when the
+   * engine is created.)
    */
   configure(config: Record<string, unknown>): void {
     if (typeof config.vadSensitivity === 'number') {
@@ -330,7 +367,13 @@ class VoiceEngine {
       )
     }
     try {
-      this.androidTtsDir = await models.prepareArchive(voice.zipAsset, ANDROID_TTS_EXTRACT_DIR)
+      this.androidTtsDir = await models.prepareArchive(
+        voice.zipAsset,
+        `${ANDROID_TTS_EXTRACT_DIR}/${this.config.ttsVoice}`
+      )
+      // The staged voice is the one that plays for the rest of the session, whatever a
+      // later configure() says — the files for any other voice were never extracted.
+      this.androidTtsVoice = this.config.ttsVoice
     } catch (e) {
       throw this.makeError(
         'TTS_MODEL_LOAD_FAILED',
@@ -348,7 +391,7 @@ class VoiceEngine {
     if (Platform.OS !== 'android' || this.androidTtsLoaded) {
       return
     }
-    const voice = ANDROID_TTS_VOICES[this.config.ttsVoice]
+    const voice = this.androidTtsVoice ? ANDROID_TTS_VOICES[this.androidTtsVoice] : undefined
     if (!voice || !this.androidTtsDir) {
       throw this.makeError(
         'TTS_VOICE_UNAVAILABLE',
@@ -368,11 +411,6 @@ class VoiceEngine {
   }
 
   // MARK: - Control
-  //
-  // On Android, listen()/speak() do their async setup up front (prepareAndroidSession),
-  // then finish in a *Sync method with no `await` in it. Keep it that way: JS runs an
-  // await-free stretch to completion, which is what stops a double tap from starting
-  // the engine twice. iOS has nothing to await and runs straight through.
 
   /**
    * Android: switch to MODE_IN_COMMUNICATION and route to a headset (else the
@@ -403,12 +441,14 @@ class VoiceEngine {
   }
 
   /**
-   * Android: all the async setup a start needs, gathered here so listen()/speak()
-   * can finish without awaiting anything.
+   * Android: all the async setup a start needs. Returns true if a stopListening()
+   * landed while it ran, in which case the caller must abort — it also gives back the
+   * communication route, since nothing is going to use it. (No state event: nothing
+   * had moved off `idle`.)
    *
    * @param stageTtsVoice also extract the TTS voice (speak() only).
    */
-  private async prepareAndroidSession(stageTtsVoice = false): Promise<void> {
+  private async prepareAndroidSession(stageTtsVoice = false): Promise<boolean> {
     // A new start attempt supersedes any Stop left over from the last one.
     this.androidStopRequested = false
     await this.ensureAndroidInitialized()
@@ -418,15 +458,7 @@ class VoiceEngine {
       await this.stageAndroidTtsVoice()
     }
     await this.enableAndroidCommunicationRoute()
-  }
 
-  /**
-   * Whether a stopListening() landed during the Android prep, in which case the
-   * pending start must abort. Clears the request as it reports it, and gives back
-   * the communication route the prep took — nothing is going to use it. No state
-   * event: nothing had moved off `idle`, so there is nothing to correct.
-   */
-  private startWasCancelled(): boolean {
     if (!this.androidStopRequested) {
       return false
     }
@@ -449,17 +481,12 @@ class VoiceEngine {
     if (!this.isInitialized) {
       throw this.notInitializedError()
     }
-    if (Platform.OS === 'android') {
-      await this.prepareAndroidSession()
-    }
-    this.listenSync()
-  }
-
-  /** listen()'s critical section. Must contain no `await` — see the note above. */
-  private listenSync(): void {
-    if (this.startWasCancelled()) {
+    if (Platform.OS === 'android' && (await this.prepareAndroidSession())) {
       return
     }
+
+    // No `await` past this line: JS runs an await-free stretch to completion, which is
+    // what stops a double tap from starting the engine twice. iOS never suspends above.
     if (!this.engineId) {
       this.createEngine()
     }
@@ -471,8 +498,8 @@ class VoiceEngine {
 
   async stopListening(): Promise<void> {
     if (!this.engineId || !this.isListening) {
-      // Nothing to stop yet. On Android that can mean a start is mid-prep, so
-      // record the intent for its critical section to honour.
+      // Nothing to stop yet. On Android that can mean a start is mid-prep, so record
+      // the intent for prepareAndroidSession() to report back to it.
       if (Platform.OS === 'android') {
         this.androidStopRequested = true
       }
@@ -495,17 +522,11 @@ class VoiceEngine {
     if (!text) {
       return
     }
-    if (Platform.OS === 'android') {
-      await this.prepareAndroidSession(true)
-    }
-    this.speakSync(text)
-  }
-
-  /** speak()'s critical section. Must contain no `await` — see the note above. */
-  private speakSync(text: string): void {
-    if (this.startWasCancelled()) {
+    if (Platform.OS === 'android' && (await this.prepareAndroidSession(true))) {
       return
     }
+
+    // No `await` past this line — see listen().
     if (!this.engineId) {
       this.createEngine()
     }
@@ -723,6 +744,10 @@ class VoiceEngine {
     if (node === 'sttNode' && name === 'transcribed') {
       const text = this.extractText(e)
       if (text == null) {
+        // Nothing decoded — still leave 'processing', or the UI sticks on it.
+        if (this.isListening && !this.isSpeaking) {
+          this.setState('listening')
+        }
         return
       }
       if (this.isSpeaking) {
@@ -733,12 +758,21 @@ class VoiceEngine {
         this.ensureClient().callAction('ttsNode', 'stop', {})
         this.setState('listening')
         this.emit('onInterrupted', undefined)
+      } else if (this.isListening) {
+        // Leave 'processing' before the transcript, not after: consumers call speak()
+        // from onTranscriptComplete, and that sets 'speaking'.
+        this.setState('listening')
       }
       this.emit('onTranscript', { text, isFinal: true })
     } else if (node === 'vadNode' && name === 'speechStarted') {
       this.emit('onSpeechStart', undefined)
     } else if (node === 'vadNode' && name === 'speechEnded') {
       this.emit('onSpeechEnd', undefined)
+      // Whisper decodes from here until 'transcribed'. Not during TTS: that window
+      // belongs to 'speaking', and a barge-in transcript reports itself.
+      if (this.isListening && !this.isSpeaking) {
+        this.setState('processing')
+      }
     } else if (node === 'ttsNode' && name === 'finished') {
       if (!this.isSpeaking) {
         return
@@ -804,6 +838,7 @@ class VoiceEngine {
     this.androidModelPath = null
     this.androidTtsLoaded = false
     this.androidTtsDir = null
+    this.androidTtsVoice = null
     this.androidStopRequested = false
     this.androidInitPromise = null
     this.config = {

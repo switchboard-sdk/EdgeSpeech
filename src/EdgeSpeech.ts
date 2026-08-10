@@ -100,9 +100,11 @@ class EdgeSpeechAPI {
       vadSensitivity: config.vadSensitivity ?? 0.5,
     }
 
-    // Initialize and configure native module
-    SwitchboardVoiceModule.initialize(finalConfig.appId, finalConfig.appSecret)
+    // Configure first: initialize() stages the Android model files named by the config.
     SwitchboardVoiceModule.configure(finalConfig)
+    // Deliberately not awaited: listen()/speak() wait for the Android staging
+    // themselves, and a caller of configure() must be configured on return.
+    SwitchboardVoiceModule.initialize(finalConfig.appId, finalConfig.appSecret)
 
     this._isConfigured = true
   }

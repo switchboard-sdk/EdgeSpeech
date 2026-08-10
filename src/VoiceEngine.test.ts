@@ -44,6 +44,17 @@ beforeEach(() => {
 })
 
 describe('VoiceEngine transport', () => {
+  it('initialize() throws synchronously when the transport itself fails', () => {
+    // A broken native module is a setup error, not a runtime one: it has to reach the
+    // caller synchronously (red-box / reject configure()), not become an unhandled
+    // rejection that leaves the app looking initialized.
+    native.default.processCommand.mockImplementation(() => {
+      throw new Error('TurboModule not found')
+    })
+
+    expect(() => voiceEngine.initialize('app-id', 'app-secret')).toThrow(/TurboModule not found/)
+  })
+
   it('initialize() surfaces a genuine failure via onError and does NOT throw', async () => {
     const errors: Array<{ code: string; message: string }> = []
     voiceEngine.addListener('onError', (e) => errors.push(e))
@@ -55,7 +66,7 @@ describe('VoiceEngine transport', () => {
       return JSON.stringify({ jsonrpc: '2.0', id, result: null })
     })
 
-    expect(() => voiceEngine.initialize('app-id', 'app-secret')).not.toThrow()
+    await expect(voiceEngine.initialize('app-id', 'app-secret')).resolves.toBeUndefined()
     expect(errors).toEqual([{ code: 'INIT_FAILED', message: 'bad credentials' }])
     // Stayed uninitialized, so a later action rejects rather than proceeding.
     await expect(voiceEngine.listen()).rejects.toThrow(/not initialized/i)
@@ -79,7 +90,7 @@ describe('VoiceEngine transport', () => {
       return JSON.stringify({ jsonrpc: '2.0', id, result: null })
     })
 
-    expect(() => voiceEngine.initialize('app-id', 'app-secret')).not.toThrow()
+    await expect(voiceEngine.initialize('app-id', 'app-secret')).resolves.toBeUndefined()
     expect(errors).toEqual([]) // not surfaced as an error
     await expect(voiceEngine.listen()).resolves.toBeUndefined() // initialized → proceeds
   })
@@ -125,6 +136,62 @@ describe('VoiceEngine transport', () => {
     native.emit(JSON.stringify({ objectURI: 'sttNode', name: 'transcribed', data: { text: 'hi' } }))
 
     expect(transcripts).toEqual([{ text: 'hi', isFinal: true }])
+  })
+
+  it('reports processing while Whisper decodes, then listening with the transcript', async () => {
+    voiceEngine.initialize('app-id', 'app-secret')
+    await voiceEngine.listen()
+    const events: string[] = []
+    voiceEngine.addListener('onStateChange', ({ state }) => events.push(`state:${state}`))
+    voiceEngine.addListener('onTranscript', ({ text }) => events.push(`transcript:${text}`))
+
+    native.emit(JSON.stringify({ objectURI: 'vadNode', name: 'speechEnded' }))
+    native.emit(JSON.stringify({ objectURI: 'sttNode', name: 'transcribed', data: { text: 'hi' } }))
+
+    // 'listening' lands before the transcript: a speak() from onTranscriptComplete
+    // must be free to set 'speaking' last.
+    expect(events).toEqual(['state:processing', 'state:listening', 'transcript:hi'])
+  })
+
+  it('leaves processing when Whisper decodes nothing', async () => {
+    voiceEngine.initialize('app-id', 'app-secret')
+    await voiceEngine.listen()
+    const states: string[] = []
+    voiceEngine.addListener('onStateChange', ({ state }) => states.push(state))
+
+    native.emit(JSON.stringify({ objectURI: 'vadNode', name: 'speechEnded' }))
+    native.emit(JSON.stringify({ objectURI: 'sttNode', name: 'transcribed', data: {} }))
+
+    expect(states).toEqual(['processing', 'listening'])
+  })
+
+  it('does not report a state for events that arrive after stopListening()', async () => {
+    voiceEngine.initialize('app-id', 'app-secret')
+    await voiceEngine.listen()
+    await voiceEngine.stopListening()
+    const states: string[] = []
+    const transcripts: string[] = []
+    voiceEngine.addListener('onStateChange', ({ state }) => states.push(state))
+    voiceEngine.addListener('onTranscript', ({ text }) => transcripts.push(text))
+
+    // The graph is down but its events can still be in flight; they must not drag the
+    // state back off 'idle'.
+    native.emit(JSON.stringify({ objectURI: 'vadNode', name: 'speechEnded' }))
+    native.emit(JSON.stringify({ objectURI: 'sttNode', name: 'transcribed', data: { text: 'hi' } }))
+
+    expect(states).toEqual([])
+    expect(transcripts).toEqual(['hi'])
+  })
+
+  it('does not report processing while TTS is playing (that window is speaking)', async () => {
+    voiceEngine.initialize('app-id', 'app-secret')
+    await voiceEngine.speak('a long answer')
+    const states: string[] = []
+    voiceEngine.addListener('onStateChange', ({ state }) => states.push(state))
+
+    native.emit(JSON.stringify({ objectURI: 'vadNode', name: 'speechEnded' }))
+
+    expect(states).toEqual([])
   })
 
   it('barge-in: a transcript during TTS stops speaking, interrupts, then transcribes', async () => {
@@ -183,8 +250,10 @@ describe('VoiceEngine transport', () => {
 describe('VoiceEngine Android platform branches', () => {
   const RN = require('react-native')
   const originalOS = RN.Platform.OS
-  const ANDROID_MODEL_PATH = '/data/user/0/app/files/models/whisper/ggml-base.en.bin'
-  const TTS_BASE = '/data/user/0/app/files/sherpa/tts'
+  const FILES_DIR = '/data/user/0/app/files'
+  const ANDROID_MODEL_PATH = `${FILES_DIR}/models/whisper/ggml-base.en.bin`
+  // Each voice gets its own extraction root, so the resolved path depends on destSubdir.
+  const ttsRoot = (voice: string) => `${FILES_DIR}/sherpa/tts/${voice}`
   let prepareModel: jest.Mock
   let prepareArchive: jest.Mock
   let initializeSdk: jest.Mock
@@ -204,7 +273,9 @@ describe('VoiceEngine Android platform branches', () => {
 
   beforeEach(() => {
     prepareModel = jest.fn().mockResolvedValue(ANDROID_MODEL_PATH)
-    prepareArchive = jest.fn().mockResolvedValue(TTS_BASE)
+    prepareArchive = jest.fn((_zip: string, dest: string) =>
+      Promise.resolve(`${FILES_DIR}/${dest}`)
+    )
     initializeSdk = jest.fn().mockResolvedValue(null)
     RN.NativeModules.EdgeSpeechModels = { prepareModel, prepareArchive, initializeSdk }
     startSentBeforeRoute = null
@@ -368,6 +439,19 @@ describe('VoiceEngine Android platform branches', () => {
     expect(prepareArchive).toHaveBeenCalledTimes(1)
   })
 
+  it('keeps the voice staged at initialize() when configure() changes it later', async () => {
+    RN.Platform.OS = 'android'
+    // Fixed for the session, as on iOS: only the staged voice's files exist on disk, so
+    // honouring the change would point loadModel at files that were never extracted.
+    await voiceEngine.initialize('app-id', 'app-secret')
+    voiceEngine.configure({ ttsVoice: 'de_DE' })
+    await voiceEngine.speak('hallo')
+
+    expect(prepareArchive).toHaveBeenCalledTimes(1)
+    expect(prepareArchive).toHaveBeenCalledWith('models/sherpa/tts/en_GB.zip', 'sherpa/tts/en_GB')
+    expect(ttsLoadCall()!.params.params.modelPath).toContain('en_GB-southern_english_female-low')
+  })
+
   it('rejects an sttModel that is not bundled, without opening the mic', async () => {
     RN.Platform.OS = 'android'
     voiceEngine.initialize('app-id', 'app-secret')
@@ -449,6 +533,46 @@ describe('VoiceEngine Android platform branches', () => {
     expect(findAction('createEngine')).toBeDefined()
   })
 
+  it('stages the model files during initialize(), before any listen()/speak()', async () => {
+    RN.Platform.OS = 'android'
+    await voiceEngine.initialize('app-id', 'app-secret')
+
+    expect(prepareModel).toHaveBeenCalledWith('models/whisper/ggml-base.en.bin')
+    expect(prepareArchive).toHaveBeenCalledWith('models/sherpa/tts/en_GB.zip', 'sherpa/tts/en_GB')
+    // Staging only materializes the files — the engine is untouched until listen().
+    expect(findAction('createEngine')).toBeUndefined()
+  })
+
+  it('stages nothing on iOS', async () => {
+    RN.Platform.OS = 'ios'
+    await voiceEngine.initialize('app-id', 'app-secret')
+
+    expect(prepareModel).not.toHaveBeenCalled()
+    expect(prepareArchive).not.toHaveBeenCalled()
+  })
+
+  it('retries a staging failure from init on the next listen()', async () => {
+    RN.Platform.OS = 'android'
+    prepareModel.mockRejectedValueOnce(new Error('no space left'))
+    await voiceEngine.initialize('app-id', 'app-secret')
+
+    await voiceEngine.listen()
+    expect(prepareModel).toHaveBeenCalledTimes(2)
+    expect(findAction('createEngine')).toBeDefined()
+  })
+
+  it('surfaces a staging failure that persists — init itself stays quiet', async () => {
+    RN.Platform.OS = 'android'
+    prepareModel.mockRejectedValue(new Error('no space left'))
+    const errors: unknown[] = []
+    voiceEngine.addListener('onError', (e) => errors.push(e))
+    await voiceEngine.initialize('app-id', 'app-secret')
+
+    expect(errors).toEqual([])
+    await expect(voiceEngine.listen()).rejects.toMatchObject({ code: 'MODEL_LOAD_FAILED' })
+    expect(findAction('createEngine')).toBeUndefined()
+  })
+
   it('does not call loadModel on iOS (model bundled in the SDK framework)', async () => {
     RN.Platform.OS = 'ios'
     voiceEngine.initialize('app-id', 'app-secret')
@@ -463,12 +587,14 @@ describe('VoiceEngine Android platform branches', () => {
     voiceEngine.initialize('app-id', 'app-secret')
     await voiceEngine.speak('hello')
 
-    expect(prepareArchive).toHaveBeenCalledWith('models/sherpa/tts/en_GB.zip', 'sherpa/tts')
+    expect(prepareArchive).toHaveBeenCalledWith('models/sherpa/tts/en_GB.zip', 'sherpa/tts/en_GB')
     const load = ttsLoadCall()!
     const v = 'en_GB/vits-piper-en_GB-southern_english_female-low'
-    expect(load.params.params.modelPath).toBe(`${TTS_BASE}/${v}/en_GB-southern_english_female-low.with_runtime_opt.ort`)
-    expect(load.params.params.tokensPath).toBe(`${TTS_BASE}/${v}/tokens.txt`)
-    expect(load.params.params.dataPath).toBe(`${TTS_BASE}/${v}/espeak-ng-data`)
+    expect(load.params.params.modelPath).toBe(
+      `${ttsRoot('en_GB')}/${v}/en_GB-southern_english_female-low.with_runtime_opt.ort`
+    )
+    expect(load.params.params.tokensPath).toBe(`${ttsRoot('en_GB')}/${v}/tokens.txt`)
+    expect(load.params.params.dataPath).toBe(`${ttsRoot('en_GB')}/${v}/espeak-ng-data`)
   })
 
   it('selects the de_DE voice zip when ttsVoice is de_DE', async () => {
@@ -477,7 +603,7 @@ describe('VoiceEngine Android platform branches', () => {
     voiceEngine.configure({ ttsVoice: 'de_DE' })
     await voiceEngine.speak('hallo')
 
-    expect(prepareArchive).toHaveBeenCalledWith('models/sherpa/tts/de_DE.zip', 'sherpa/tts')
+    expect(prepareArchive).toHaveBeenCalledWith('models/sherpa/tts/de_DE.zip', 'sherpa/tts/de_DE')
     expect(ttsLoadCall()!.params.params.modelPath).toContain('de_DE-thorsten-low.with_runtime_opt.ort')
   })
 
@@ -499,7 +625,7 @@ describe('VoiceEngine Android platform branches', () => {
 
     await Promise.all([voiceEngine.listen(), voiceEngine.listen()])
 
-    // Both calls clear the async prep, then the first runs its critical section to
+    // Both calls clear the async prep, then the first runs its await-free stretch to
     // completion (isListening = true) before the second is scheduled.
     expect(countAction('createEngine')).toBe(1)
     expect(countAction('start')).toBe(1)

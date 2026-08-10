@@ -3,8 +3,15 @@ import { type VoiceState } from './SwitchboardVoiceModule'
 import { useEdgeSpeechContext } from './EdgeSpeechProvider'
 
 export function useEdgeSpeech() {
-  const { addListener, listen, stopListening, speak, stopSpeaking, requestMicrophonePermission } =
-    useEdgeSpeechContext()
+  const {
+    addListener,
+    isInitializing,
+    listen,
+    stopListening,
+    speak,
+    stopSpeaking,
+    requestMicrophonePermission,
+  } = useEdgeSpeechContext()
 
   const [transcript, setTranscript] = useState('')
   const transcriptCompleteCallback = useRef<((text: string) => void) | null>(null)
@@ -103,6 +110,7 @@ export function useEdgeSpeech() {
     onTranscriptComplete,
     onInterrupted,
     voiceState,
+    isInitializing,
     error,
     hasMicrophonePermission,
     listen: wrappedListen,

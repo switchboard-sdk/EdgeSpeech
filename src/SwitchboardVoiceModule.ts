@@ -13,8 +13,9 @@ export type { VoiceState, TranscriptEvent, StateChangeEvent, ErrorEvent }
  * and any downstream consumers are unaffected.
  */
 const SwitchboardVoiceModule = {
-  initialize(appId: string, appSecret: string): void {
-    voiceEngine.initialize(appId, appSecret)
+  /** Resolves once init has settled — on Android, including the model staging. */
+  initialize(appId: string, appSecret: string): Promise<void> {
+    return voiceEngine.initialize(appId, appSecret)
   },
 
   configure(config: Record<string, unknown>): void {

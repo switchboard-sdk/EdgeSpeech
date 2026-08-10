@@ -1,8 +1,11 @@
-import React, { createContext, useContext, useEffect, type ReactNode } from 'react'
+import React, { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { Platform } from 'react-native'
 import SwitchboardVoiceModule from './SwitchboardVoiceModule'
 
 export interface EdgeSpeechContextValue {
   addListener: typeof SwitchboardVoiceModule.addListener
+  /** Android: true until the models are ready — a listen()/speak() before that waits. */
+  isInitializing: boolean
   listen: () => Promise<void>
   stopListening: () => Promise<void>
   speak: (text: string) => Promise<void>
@@ -39,6 +42,9 @@ export function EdgeSpeechProvider({
   bufferSize,
   children,
 }: EdgeSpeechProviderProps) {
+  // Android stages the model files during initialize(); iOS has nothing to wait for.
+  const [isInitializing, setIsInitializing] = useState(Platform.OS === 'android')
+
   if (!appId || appId.trim() === '') {
     throw new Error('EdgeSpeechProvider: appId is required')
   }
@@ -55,14 +61,8 @@ export function EdgeSpeechProvider({
     throw new Error('EdgeSpeechProvider: ttsVoice cannot be an empty string')
   }
 
-  useEffect(() => {
-    SwitchboardVoiceModule.initialize(appId, appSecret)
-
-    return () => {
-      SwitchboardVoiceModule.stopListening().catch(() => {})
-    }
-  }, [appId, appSecret])
-
+  // Runs before the initialize() effect below, which stages the model files this
+  // config names.
   useEffect(() => {
     SwitchboardVoiceModule.configure({
       sttModel: sttModel ?? defaultConfig.sttModel,
@@ -73,9 +73,24 @@ export function EdgeSpeechProvider({
     })
   }, [sttModel, ttsVoice, vadSensitivity, sampleRate, bufferSize])
 
+  useEffect(() => {
+    let active = true
+    SwitchboardVoiceModule.initialize(appId, appSecret).finally(() => {
+      if (active) {
+        setIsInitializing(false)
+      }
+    })
+
+    return () => {
+      active = false
+      SwitchboardVoiceModule.stopListening().catch(() => {})
+    }
+  }, [appId, appSecret])
+
   const value: EdgeSpeechContextValue = {
     // Keep NativeModule method bound to avoid losing JSI `this` context.
     addListener: SwitchboardVoiceModule.addListener.bind(SwitchboardVoiceModule),
+    isInitializing,
     listen: () => SwitchboardVoiceModule.listen(),
     stopListening: () => SwitchboardVoiceModule.stopListening(),
     speak: (text) => SwitchboardVoiceModule.speak(text),

@@ -21,8 +21,8 @@ export { useEdgeSpeech } from './hook'
 // Export convenience functions that delegate to the native module
 import SwitchboardVoiceModule from './SwitchboardVoiceModule'
 
-export function initialize(appId: string, appSecret: string): void {
-  SwitchboardVoiceModule.initialize(appId, appSecret)
+export function initialize(appId: string, appSecret: string): Promise<void> {
+  return SwitchboardVoiceModule.initialize(appId, appSecret)
 }
 
 export function configure(config: Record<string, any>): void {
