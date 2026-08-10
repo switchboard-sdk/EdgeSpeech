@@ -1,4 +1,5 @@
 import { EdgeSpeech } from './EdgeSpeech'
+import SwitchboardVoiceModule from './SwitchboardVoiceModule'
 import type { VoiceConfig } from './types'
 
 // Mock the SwitchboardVoiceModule façade directly — it wraps the native TurboModule
@@ -55,11 +56,24 @@ describe('EdgeSpeech', () => {
         appId: 'test-id',
         appSecret: 'test-secret',
         sttModel: 'whisper-base-en',
-        ttsVoice: 'silero-en-us',
+        ttsVoice: 'de_DE',
         vadSensitivity: 0.7,
       }
 
       await expect(EdgeSpeech.configure(config)).resolves.toBeUndefined()
+      expect(SwitchboardVoiceModule.configure).toHaveBeenCalledWith(
+        expect.objectContaining({ ttsVoice: 'de_DE', sttModel: 'whisper-base-en' })
+      )
+    })
+
+    it('defaults to a voice the engine actually has', async () => {
+      // Must be a key of ANDROID_TTS_VOICES, or Android throws TTS_VOICE_UNAVAILABLE on
+      // the first speak(). iOS ignores ttsVoice entirely, so only Android reveals a typo.
+      await EdgeSpeech.configure({ appId: 'test-id', appSecret: 'test-secret' })
+
+      expect(SwitchboardVoiceModule.configure).toHaveBeenCalledWith(
+        expect.objectContaining({ ttsVoice: 'en_GB' })
+      )
     })
 
     it('should validate vadSensitivity range (above 1.0)', async () => {

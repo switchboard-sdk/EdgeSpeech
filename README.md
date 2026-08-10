@@ -195,7 +195,7 @@ Wrap your app in the `EdgeSpeechProvider` and configure it.
   appId="YOUR_APP_ID"         // Optional: Switchboard app ID
   appSecret="YOUR_APP_SECRET" // Optional: Switchboard app secret
   sttModel="whisper-base-en"  // Optional: STT model (default: 'whisper-base-en')
-  ttsVoice="en_GB"            // Optional: TTS voice (default: 'en_GB')
+  ttsVoice="en_GB"            // Optional: 'en_GB' | 'de_DE' — Android only (default: 'en_GB')
   vadSensitivity={0.5}        // Optional: VAD sensitivity 0.0–1.0 (default: 0.5)
 >
   <App />

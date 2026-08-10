@@ -96,7 +96,7 @@ class EdgeSpeechAPI {
       appId: config.appId,
       appSecret: config.appSecret,
       sttModel: config.sttModel || 'whisper-base-en',
-      ttsVoice: config.ttsVoice || 'silero-en-us',
+      ttsVoice: config.ttsVoice || 'en_GB',
       vadSensitivity: config.vadSensitivity ?? 0.5,
     }
 

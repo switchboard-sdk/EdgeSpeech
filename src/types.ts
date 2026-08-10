@@ -16,7 +16,7 @@ export interface VoiceConfig {
   /** STT model to use (optional, default: 'whisper-base-en') */
   sttModel?: string
 
-  /** TTS voice to use (optional, default: 'silero-en-us') */
+  /** TTS voice: 'en_GB' | 'de_DE' (optional, default: 'en_GB'; Android only) */
   ttsVoice?: string
 
   /** VAD sensitivity (0.0-1.0, default: 0.5) */
