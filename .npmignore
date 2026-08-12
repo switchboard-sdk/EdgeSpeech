@@ -15,7 +15,7 @@ dist/**/*.test.d.ts.map
 # Example app
 example/
 
-# Scripts directory (scripts/postinstall.js is whitelisted via files in package.json)
+# Scripts directory (scripts/download-ios-frameworks.sh is whitelisted via files in package.json)
 scripts/
 
 # iOS native frameworks and integration tests
