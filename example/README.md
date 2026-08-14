@@ -2,6 +2,40 @@
 
 The app has two sections: **Voice Input** for transcription (tap "Start Listening", speak, watch the transcript appear) and **Text-to-Speech** (type text, tap "Speak"). Enable **Conversation Mode** to wire them together automatically: speech is transcribed, sent to an LLM, and the response is spoken back.
 
+## Conversation Mode's LLM
+
+Everything except the LLM step runs on-device. The LLM lives in `services/chatService.ts` and calls
+[Pollinations](https://pollinations.ai)' keyless OpenAI-compatible endpoint so the demo works with no
+signup and no API key. The model is `openai-fast` (GPT-OSS 20B) — the only entry `GET /models`
+returns for the anonymous tier, and the canonical name behind the `openai` / `gpt-oss-20b` aliases.
+
+The anonymous tier is strict, and its responses carry no `Retry-After` or `x-ratelimit-*` headers,
+so `chatService` enforces the limits itself:
+
+| Status | Meaning                                                        | Handling                                                            |
+| ------ | -------------------------------------------------------------- | ------------------------------------------------------------------- |
+| `429`  | `Queue full for IP` — one request in flight per IP, ~1 per 30s | Retried after clearing the 30s interval                             |
+| `402`  | The shared anonymous request pool is out of credit ("pollen")  | Not retried — server-side, retrying cannot fix it                   |
+| `404`  | Model retired                                                  | Not retried; re-check `GET /models` for the current anonymous model |
+| `403`  | IP blocked                                                     | Not retried                                                         |
+
+Consequences worth knowing before you rely on this:
+
+- **One exchange per ~30 seconds.** The per-IP limit is one request in flight and roughly one every
+  30s, so Conversation Mode cannot sustain a natural back-and-forth. `chatService` serialises and
+  spaces calls to respect that rather than tripping the limiter.
+- **`402` is not your fault and not fixable client-side.** The pool drains for everyone using the
+  keyless endpoint; when it's empty, every fresh request fails until it's topped up. Cached prompts
+  keep returning `200`, which can make the service look healthier than it is.
+- **Responses are cached aggressively.** Identical prompts return long-lived cached completions, so
+  each request sends a random `seed` to get a fresh answer.
+- **Anonymous traffic can have referral content injected into completions** (~5% unless the referrer
+  is allow-listed). This app _speaks its responses aloud_, so an injected ad would be read out. Do
+  not ship this path to users.
+- **Transcripts leave the device.** Only in Conversation Mode, and only the text — but they go to a
+  third-party host. Swap `chatService.ts` for your own backend before shipping anything real; the
+  `sendToChat(message, history)` signature is the only contract the app depends on.
+
 ## Prerequisites
 
 - Node.js 20+

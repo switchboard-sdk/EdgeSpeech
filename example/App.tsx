@@ -44,7 +44,7 @@ function VoiceApp(): React.JSX.Element {
       await stopListening()
       let response: string
       try {
-        response = await sendToChat(userMessage.content, [...conversationHistory, userMessage])
+        response = await sendToChat(userMessage.content, conversationHistory)
       } catch (error) {
         console.error('Chat error:', error)
         Alert.alert('Chat Error', (error as Error).message)
