@@ -8,6 +8,7 @@ import com.synervoz.switchboard.sdk.Switchboard
 import java.io.BufferedInputStream
 import java.io.File
 import java.io.FileNotFoundException
+import java.io.IOException
 import java.util.zip.ZipInputStream
 import org.json.JSONObject
 
@@ -48,32 +49,39 @@ class EdgeSpeechModelsModule(private val reactContext: ReactApplicationContext) 
     }
   }
 
-  /** Copy asset [assetPath] to filesDir (only if missing/size-changed) and resolve its path. */
+  /** Copy asset [assetPath] to filesDir (only if missing/changed) and resolve its path. */
   @ReactMethod
   fun prepareModel(assetPath: String, promise: Promise) {
     try {
       val assets = reactContext.assets
       val dest = File(reactContext.filesDir, assetPath)
+      val stamp = File(dest.parentFile, "${dest.name}.stamp")
 
-      // Cheap up-to-date check via the asset's real size. openFd().length only works
-      // on uncompressed assets — the .bin is compressed in the APK, so this usually
-      // throws and we fall back to an existence check (see catch below).
-      val assetSize: Long =
-        try {
-          assets.openFd(assetPath).use { it.length }
-        } catch (e: Exception) {
-          -1L // compressed / unknown — fall back to an existence check
-        }
+      // available() is the asset's length without inflating it (openFd() only works on
+      // uncompressed assets, and the .bin is compressed in the APK). We compare it to the
+      // value recorded by the copy that produced dest, so what the number *means* doesn't
+      // matter — only that the same asset always reports the same one. A shipped model
+      // that changes reports a different one and is re-copied.
+      val assetSize = assets.open(assetPath).use { it.available().toLong() }
 
-      if (dest.exists() && (assetSize < 0L || dest.length() == assetSize)) {
+      val stamped = if (stamp.exists()) stamp.readText().trim() else null
+      if (dest.exists() && stamped == assetSize.toString()) {
         promise.resolve(dest.absolutePath)
         return
       }
 
+      // Copy to a sidecar and rename. Process death or a full disk mid-copy then leaves
+      // a .part to overwrite and no stamp, rather than a truncated model that every later
+      // launch treats as valid. The stamp lands last, so it only describes a finished copy.
       dest.parentFile?.mkdirs()
+      val part = File(dest.parentFile, "${dest.name}.part")
       assets.open(assetPath).use { input ->
-        dest.outputStream().use { output -> input.copyTo(output, 1 shl 16) }
+        part.outputStream().use { output -> input.copyTo(output, 1 shl 16) }
       }
+      if (!part.renameTo(dest)) {
+        throw IOException("Could not move ${part.name} into place")
+      }
+      stamp.writeText(assetSize.toString())
       promise.resolve(dest.absolutePath)
     } catch (e: FileNotFoundException) {
       // The asset isn't in the APK — the app configured a model outside the set the
