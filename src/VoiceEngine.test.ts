@@ -263,6 +263,14 @@ describe('VoiceEngine Android platform branches', () => {
   /** Whether the engine had already been told to start when the route was entered. */
   let startSentBeforeRoute: boolean | null
 
+  const sttLoadCalls = () =>
+    sentCalls().filter(
+      (c) =>
+        c.method === 'callAction' &&
+        c.params?.actionName === 'loadModel' &&
+        c.params?.objectURI === 'sttNode'
+    )
+
   const ttsLoadCall = () =>
     sentCalls().find(
       (c) =>
@@ -450,6 +458,39 @@ describe('VoiceEngine Android platform branches', () => {
     expect(prepareArchive).toHaveBeenCalledTimes(1)
     expect(prepareArchive).toHaveBeenCalledWith('models/sherpa/tts/en_GB.zip', 'sherpa/tts/en_GB')
     expect(ttsLoadCall()!.params.params.modelPath).toContain('en_GB-southern_english_female-low')
+  })
+
+  it('discards the engine when Whisper loadModel fails, so a retry reloads it', async () => {
+    RN.Platform.OS = 'android'
+    // engineId is assigned before the model loads. If a failed load left it set, the next
+    // listen() would skip createEngine() — and start a graph whose sttNode has no model,
+    // which transcribes nothing and reports no error.
+    let failNextLoad = true
+    native.default.processCommand.mockImplementation((cmd: string) => {
+      const { id, method, params } = JSON.parse(cmd)
+      if (method === 'callAction' && params?.actionName === 'createEngine') {
+        return JSON.stringify({ jsonrpc: '2.0', id, result: 'engine_1' })
+      }
+      if (params?.actionName === 'loadModel' && params?.objectURI === 'sttNode' && failNextLoad) {
+        failNextLoad = false
+        return JSON.stringify({
+          jsonrpc: '2.0',
+          id,
+          error: { code: -32000, message: 'bad model file' },
+        })
+      }
+      return JSON.stringify({ jsonrpc: '2.0', id, result: null })
+    })
+
+    voiceEngine.initialize('app-id', 'app-secret')
+    await expect(voiceEngine.listen()).rejects.toMatchObject({ code: 'MODEL_LOAD_FAILED' })
+    expect(findAction('start')).toBeUndefined()
+
+    await voiceEngine.listen()
+
+    expect(countAction('createEngine')).toBe(2)
+    expect(sttLoadCalls()).toHaveLength(2)
+    expect(findAction('start')).toBeDefined()
   })
 
   it('rejects an unknown sttModel, without opening the mic', async () => {

@@ -622,28 +622,39 @@ class VoiceEngine {
     }
     this.engineId = res.result
 
-    // iOS: enable VoiceProcessingIO (AEC). Must be set after creation via setValue —
-    // with one combined engine this keeps AEC active during TTS playback and
-    // prevents self-triggered barge-in. The key does not exist in the Android SDK,
-    // where AEC comes from the input preset + communication route instead (see
-    // enableAndroidCommunicationRoute).
-    client.setValue(this.engineId, 'voiceProcessingEnabled', true)
+    // Past this point engineId is set, so a throw would leave a half-built engine that
+    // the next listen() reuses — skipping createEngine(), and with it the model load.
+    // Discard it instead: a retry then builds and loads a fresh one.
+    try {
+      // iOS: enable VoiceProcessingIO (AEC). Must be set after creation via setValue —
+      // with one combined engine this keeps AEC active during TTS playback and
+      // prevents self-triggered barge-in. The key does not exist in the Android SDK,
+      // where AEC comes from the input preset + communication route instead (see
+      // enableAndroidCommunicationRoute).
+      client.setValue(this.engineId, 'voiceProcessingEnabled', true)
 
-    // Android: load the Whisper model by path (iOS auto-loads its bundled model).
-    if (Platform.OS === 'android') {
-      if (!this.androidModelPath) {
-        throw this.makeError(
-          'MODEL_UNAVAILABLE',
-          'Whisper model path was not resolved before engine creation (call listen()/speak()).'
-        )
+      // Android: load the Whisper model by path (iOS auto-loads its bundled model).
+      if (Platform.OS === 'android') {
+        if (!this.androidModelPath) {
+          throw this.makeError(
+            'MODEL_UNAVAILABLE',
+            'Whisper model path was not resolved before engine creation (call listen()/speak()).'
+          )
+        }
+        const loadRes = client.callAction('sttNode', 'loadModel', {
+          modelPath: this.androidModelPath,
+          useGPU: false,
+        })
+        if (loadRes.error) {
+          throw this.makeError(
+            'MODEL_LOAD_FAILED',
+            `Whisper loadModel failed: ${loadRes.error.message}`
+          )
+        }
       }
-      const loadRes = client.callAction('sttNode', 'loadModel', {
-        modelPath: this.androidModelPath,
-        useGPU: false,
-      })
-      if (loadRes.error) {
-        throw this.makeError('MODEL_LOAD_FAILED', `Whisper loadModel failed: ${loadRes.error.message}`)
-      }
+    } catch (e) {
+      this.destroyEngine()
+      throw e
     }
   }
 
