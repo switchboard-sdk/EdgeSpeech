@@ -1,46 +1,35 @@
 /**
  * Chat backend for the example app's Conversation Mode.
  *
- * Uses Pollinations' keyless legacy endpoint (`openai-fast`, the only model on
- * the anonymous tier). Its limits are undocumented in the response — no
- * Retry-After, no x-ratelimit-* headers — so the client enforces them itself:
+ * Calls the Switchboard API's OpenAI proxy, authenticated with the same App ID and
+ * App Secret the SDK is initialised with. The OpenAI key lives on the app's config in
+ * the console and never reaches the device — this app only ever sees generated text.
  *
- *   429 "Queue full for IP" — one request in flight per IP, ~1 per 30s. Retryable
- *                             after clearing the interval.
- *   402 PAYMENT_REQUIRED    — the shared anonymous request pool is out of credit
- *                             ("pollen"). Server-side; retrying cannot fix it.
- *   404                     — model retired. Re-check GET /models.
- *   403                     — IP blocked.
+ * The proxy clamps the model, output length and history server-side, and rate limits
+ * per app. It returns `Retry-After` on 429, which is honoured below.
  */
 
-const POLLINATIONS_URL = 'https://text.pollinations.ai/openai'
-
-/** Canonical name from GET /models; `openai` and `gpt-oss-20b` are aliases for it. */
-const MODEL = 'openai-fast'
-
-/** Identifies the caller. Anonymous traffic can have referral content injected into completions. */
-const REFERRER = 'https://github.com/switchboard-sdk/EdgeSpeech'
+const CHAT_URL = 'https://api.switchboard.audio/openai/chat'
 
 const SYSTEM_PROMPT =
   'You are a helpful, friendly voice assistant. Keep responses concise (1-2 sentences) since they will be spoken aloud.'
 
 const FALLBACK_REPLY = 'Sorry, I could not generate a response.'
 
-/** Transient only. 402/403/404 are deliberately absent — no amount of retrying clears them. */
+/** Transient only. 4xx other than 429 means the request or credentials are wrong. */
 const RETRYABLE_STATUSES = new Set([408, 425, 429, 500, 502, 503, 504])
 
 const DEFAULT_TUNING = {
-  /** Trailing history messages to send (4 exchanges). */
+  /** Trailing history messages to send; the proxy trims further if needed. */
   historyMessages: 8,
-  /** Matches the server's per-IP interval, so a normal turn never trips the queue. */
-  minRequestIntervalMs: 30_000,
+  /** Light spacing so a fast conversation can't trip the proxy's limiter. */
+  minRequestIntervalMs: 1_000,
   requestTimeoutMs: 20_000,
-  maxAttempts: 2,
-  /** Retries must clear the 30s interval, so backoff starts above it rather than at zero. */
-  retryFloorMs: 30_000,
-  retryJitterMs: 10_000,
+  maxAttempts: 3,
+  baseBackoffMs: 2_000,
+  maxBackoffMs: 10_000,
   /** Ceiling on total time in sendToChat, retries and spacing included. */
-  totalBudgetMs: 90_000,
+  totalBudgetMs: 45_000,
 }
 
 export type ChatTuning = typeof DEFAULT_TUNING
@@ -48,6 +37,11 @@ export type ChatTuning = typeof DEFAULT_TUNING
 export interface ConversationMessage {
   role: 'user' | 'assistant'
   content: string
+}
+
+export interface ChatCredentials {
+  appId: string
+  appSecret: string
 }
 
 export interface SendToChatOptions extends Partial<ChatTuning> {
@@ -60,28 +54,38 @@ interface RequestMessage {
   content: string
 }
 
-interface CompletionResponse {
-  choices?: Array<{ message?: { content?: string | null } }>
-}
-
-interface ErrorBody {
-  error?: string | { message?: string }
-  details?: { error?: { message?: string; code?: string } }
+interface ProxyResponse {
+  success?: boolean
+  message?: string
+  data?: { text?: string; model?: string }
 }
 
 export class ChatError extends Error {
   readonly status?: number
   readonly retryable: boolean
+  /** Server-specified wait, when it sent a Retry-After header. */
+  readonly retryAfterMs?: number
 
-  constructor(message: string, opts: { status?: number; retryable: boolean }) {
+  constructor(
+    message: string,
+    opts: { status?: number; retryable: boolean; retryAfterMs?: number }
+  ) {
     super(message)
     this.name = 'ChatError'
     this.status = opts.status
     this.retryable = opts.retryable
+    this.retryAfterMs = opts.retryAfterMs
   }
 }
 
-/** Serialises requests — the server allows exactly one in flight per IP. */
+let credentials: ChatCredentials | null = null
+
+/** Called once at startup with the same credentials passed to EdgeSpeechProvider. */
+export function configureChat(next: ChatCredentials): void {
+  credentials = next
+}
+
+/** Serialises requests so a burst of turns can't trip the proxy's per-app limiter. */
 let queue: Promise<unknown> = Promise.resolve()
 let lastRequestAt = 0
 
@@ -90,20 +94,28 @@ export async function sendToChat(
   conversationHistory: ConversationMessage[],
   options: SendToChatOptions = {}
 ): Promise<string> {
+  if (!credentials?.appId || !credentials?.appSecret) {
+    throw new ChatError(
+      'Chat is not configured — call configureChat() with your Switchboard App ID and Secret.',
+      { retryable: false }
+    )
+  }
+
   const tuning: ChatTuning = { ...DEFAULT_TUNING, ...options }
   const doFetch = options.fetchImpl ?? fetch
   const messages = buildMessages(userMessage, conversationHistory, tuning)
 
-  const run = () => requestWithRetry(messages, tuning, doFetch)
+  const run = () => requestWithRetry(messages, credentials as ChatCredentials, tuning, doFetch)
   const result = queue.then(run, run)
   queue = result.catch(() => undefined)
   return result
 }
 
-/** Test seam: clears the spacing timer and in-flight queue between cases. */
+/** Test seam: clears the spacing timer, in-flight queue and credentials. */
 export function resetChatState(): void {
   queue = Promise.resolve()
   lastRequestAt = 0
+  credentials = null
 }
 
 function buildMessages(
@@ -120,6 +132,7 @@ function buildMessages(
 
 async function requestWithRetry(
   messages: RequestMessage[],
+  creds: ChatCredentials,
   tuning: ChatTuning,
   doFetch: typeof fetch
 ): Promise<string> {
@@ -130,11 +143,11 @@ async function requestWithRetry(
     await respectMinInterval(tuning)
 
     try {
-      return await postCompletion(messages, tuning, doFetch)
+      return await postChat(messages, creds, tuning, doFetch)
     } catch (error) {
       lastError = asChatError(error)
 
-      const wait = backoffFor(attempt, tuning)
+      const wait = lastError.retryAfterMs ?? backoffFor(attempt, tuning)
       const budgetLeft = tuning.totalBudgetMs - (Date.now() - startedAt)
       if (!lastError.retryable || attempt === tuning.maxAttempts || wait > budgetLeft) {
         break
@@ -142,7 +155,7 @@ async function requestWithRetry(
 
       console.warn(
         `[Chat] attempt ${attempt}/${tuning.maxAttempts} failed (${lastError.message}); ` +
-          `retrying in ${Math.round(wait / 1000)}s`
+          `retrying in ${Math.round(wait)}ms`
       )
       await sleep(wait)
     }
@@ -151,8 +164,9 @@ async function requestWithRetry(
   throw lastError ?? new ChatError('Chat request failed', { retryable: false })
 }
 
-async function postCompletion(
+async function postChat(
   messages: RequestMessage[],
+  creds: ChatCredentials,
   tuning: ChatTuning,
   doFetch: typeof fetch
 ): Promise<string> {
@@ -161,16 +175,13 @@ async function postCompletion(
 
   let response: Response
   try {
-    response = await doFetch(POLLINATIONS_URL, {
+    response = await doFetch(CHAT_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Referer: REFERRER },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: MODEL,
+        appId: creds.appId,
+        appSecret: creds.appSecret,
         messages,
-        stream: false,
-        referrer: REFERRER,
-        // Identical prompts are served from a long-lived cache, so vary the seed.
-        seed: Math.floor(Math.random() * 1_000_000_000),
       }),
       signal: controller.signal,
     })
@@ -187,68 +198,56 @@ async function postCompletion(
     throw new ChatError(await describeFailure(response), {
       status: response.status,
       retryable: RETRYABLE_STATUSES.has(response.status),
+      retryAfterMs: retryAfterMs(response),
     })
   }
 
-  let data: CompletionResponse
+  let body: ProxyResponse
   try {
-    data = (await response.json()) as CompletionResponse
+    body = (await response.json()) as ProxyResponse
   } catch (error) {
     throw new ChatError(`Malformed response: ${(error as Error).message}`, { retryable: false })
   }
 
-  return cleanReply(data.choices?.[0]?.message?.content ?? '')
+  const text = body.data?.text?.trim()
+  if (!text) {
+    console.warn('[Chat] proxy returned no text; using fallback')
+    return FALLBACK_REPLY
+  }
+  return text
 }
 
 async function describeFailure(response: Response): Promise<string> {
   const detail = await readErrorDetail(response)
 
   switch (response.status) {
-    case 402:
-      return (
-        'Pollinations returned 402: the shared anonymous request pool is out of credit. ' +
-        `This is server-side, not a bad request — retrying will not help.${detail}`
-      )
+    case 401:
+      return `Switchboard rejected the app credentials.${detail}`
     case 429:
-      return `Pollinations returned 429: per-IP limit is one request in flight, ~1 per 30s.${detail}`
-    case 404:
-      return `Pollinations returned 404: model "${MODEL}" is gone — check GET /models.${detail}`
-    case 403:
-      return `Pollinations returned 403: this IP appears to be blocked.${detail}`
+      return `Rate limited by the chat proxy.${detail}`
     default:
       return `Chat API error: ${response.status}${detail}`
   }
 }
 
-/** Pulls the server's own explanation out of the error body when there is one. */
+/** The proxy always answers with { success, message } — surface its message. */
 async function readErrorDetail(response: Response): Promise<string> {
   try {
-    const body = (await response.json()) as ErrorBody
-    const nested = body.details?.error?.message
-    const top = typeof body.error === 'string' ? body.error : body.error?.message
-    const message = nested ?? top
+    const body = (await response.json()) as ProxyResponse & { error?: { message?: string } }
+    const message = body.message ?? body.error?.message
     return message ? ` (${message})` : ''
   } catch {
     return ''
   }
 }
 
-/**
- * openai-fast returns its reasoning in a separate field, but strip inline
- * <think> blocks defensively — including an unterminated one from a cut-off
- * response, which would otherwise be spoken aloud.
- */
-function cleanReply(content: string): string {
-  const stripped = content
-    .replace(/<think>[\s\S]*?<\/think>/g, '')
-    .replace(/<think>[\s\S]*$/, '')
-    .trim()
-
-  if (!stripped) {
-    console.warn('[Chat] reply was empty after cleaning; using fallback')
-    return FALLBACK_REPLY
+function retryAfterMs(response: Response): number | undefined {
+  const header = response.headers?.get?.('Retry-After')
+  if (!header) {
+    return undefined
   }
-  return stripped
+  const seconds = Number(header)
+  return Number.isFinite(seconds) && seconds >= 0 ? seconds * 1_000 : undefined
 }
 
 async function respectMinInterval(tuning: ChatTuning): Promise<void> {
@@ -259,9 +258,10 @@ async function respectMinInterval(tuning: ChatTuning): Promise<void> {
   lastRequestAt = Date.now()
 }
 
-/** Jitter sits on top of the interval floor, so a retry never lands inside it. */
+/** Exponential backoff with full jitter, used when the server sends no Retry-After. */
 function backoffFor(attempt: number, tuning: ChatTuning): number {
-  return tuning.retryFloorMs * attempt + Math.random() * tuning.retryJitterMs
+  const ceiling = Math.min(tuning.maxBackoffMs, tuning.baseBackoffMs * 2 ** (attempt - 1))
+  return Math.random() * ceiling
 }
 
 function asChatError(error: unknown): ChatError {

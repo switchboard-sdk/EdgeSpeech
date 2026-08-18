@@ -4,36 +4,30 @@ The app has two sections: **Voice Input** for transcription (tap "Start Listenin
 
 ## Conversation Mode's LLM
 
-Everything except the LLM step runs on-device. The LLM lives in `services/chatService.ts` and calls
-[Pollinations](https://pollinations.ai)' keyless OpenAI-compatible endpoint so the demo works with no
-signup and no API key. The model is `openai-fast` (GPT-OSS 20B) — the only entry `GET /models`
-returns for the anonymous tier, and the canonical name behind the `openai` / `gpt-oss-20b` aliases.
+Everything except the LLM step runs on-device. For the LLM turn, `services/chatService.ts` posts to
+the Switchboard API's OpenAI proxy at `https://api.switchboard.audio/openai/chat`, authenticated with
+the **same App ID and App Secret** the SDK is initialised with — `configureChat()` is called once in
+`App.tsx` with those values.
 
-The anonymous tier is strict, and its responses carry no `Retry-After` or `x-ratelimit-*` headers,
-so `chatService` enforces the limits itself:
+No OpenAI key is needed here, and none is shipped in the app. The key is set on your app's config in
+the [console](https://console.switchboard.audio), and the API uses it server-side; the app only ever
+receives generated text.
 
-| Status | Meaning                                                        | Handling                                                            |
-| ------ | -------------------------------------------------------------- | ------------------------------------------------------------------- |
-| `429`  | `Queue full for IP` — one request in flight per IP, ~1 per 30s | Retried after clearing the 30s interval                             |
-| `402`  | The shared anonymous request pool is out of credit ("pollen")  | Not retried — server-side, retrying cannot fix it                   |
-| `404`  | Model retired                                                  | Not retried; re-check `GET /models` for the current anonymous model |
-| `403`  | IP blocked                                                     | Not retried                                                         |
+The proxy owns the request shape. It picks the model and output length and trims history, so the app
+sends only `messages` — no `model`, no `max_tokens`. It also rate limits per app and answers `429`
+with a `Retry-After`, which `chatService` honours in preference to its own backoff.
 
-Consequences worth knowing before you rely on this:
+| Status | Meaning                             | Handling                                         |
+| ------ | ----------------------------------- | ------------------------------------------------ |
+| `429`  | Per-app rate limit reached          | Retried, waiting the `Retry-After` the API sends |
+| `401`  | App credentials rejected            | Not retried — fix your `.env`                    |
+| `400`  | No OpenAI key set on the app config | Not retried — set one in the console             |
 
-- **One exchange per ~30 seconds.** The per-IP limit is one request in flight and roughly one every
-  30s, so Conversation Mode cannot sustain a natural back-and-forth. `chatService` serialises and
-  spaces calls to respect that rather than tripping the limiter.
-- **`402` is not your fault and not fixable client-side.** The pool drains for everyone using the
-  keyless endpoint; when it's empty, every fresh request fails until it's topped up. Cached prompts
-  keep returning `200`, which can make the service look healthier than it is.
-- **Responses are cached aggressively.** Identical prompts return long-lived cached completions, so
-  each request sends a random `seed` to get a fresh answer.
-- **Anonymous traffic can have referral content injected into completions** (~5% unless the referrer
-  is allow-listed). This app _speaks its responses aloud_, so an injected ad would be read out. Do
-  not ship this path to users.
-- **Transcripts leave the device.** Only in Conversation Mode, and only the text — but they go to a
-  third-party host. Swap `chatService.ts` for your own backend before shipping anything real; the
+Two things to know:
+
+- **Transcripts leave the device in Conversation Mode.** Only the text, and only to our API — but
+  the transcription, VAD and speech synthesis around it are entirely on-device.
+- **To use your own backend instead**, replace `chatService.ts`. The
   `sendToChat(message, history)` signature is the only contract the app depends on.
 
 ## Prerequisites

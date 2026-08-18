@@ -2,49 +2,53 @@
  * Unit tests for chatService's defensive behaviour. No network — fetch is injected.
  */
 
-import { sendToChat, resetChatState, ChatError } from '../example/services/chatService'
+import {
+  sendToChat,
+  configureChat,
+  resetChatState,
+  ChatError,
+} from '../example/services/chatService'
 
 const FAST = {
   minRequestIntervalMs: 0,
-  retryFloorMs: 1,
-  retryJitterMs: 1,
+  baseBackoffMs: 1,
+  maxBackoffMs: 2,
   requestTimeoutMs: 500,
 }
 
-function reply(content: string): Response {
+const CREDS = { appId: 'a'.repeat(24), appSecret: 'secret' }
+
+function reply(text: string): Response {
   return {
     ok: true,
     status: 200,
-    json: async () => ({ choices: [{ message: { content } }] }),
+    headers: { get: () => null },
+    json: async () => ({ success: true, message: 'Success', data: { text } }),
   } as unknown as Response
 }
 
-function failure(status: number, body: unknown = {}): Response {
-  return { ok: false, status, json: async () => body } as unknown as Response
+function failure(
+  status: number,
+  body: unknown = {},
+  headers: Record<string, string> = {}
+): Response {
+  return {
+    ok: false,
+    status,
+    headers: { get: (name: string) => headers[name] ?? null },
+    json: async () => body,
+  } as unknown as Response
 }
 
-/** Shape Pollinations actually returns when the anonymous pool is drained. */
-const POLLEN_EXHAUSTED = {
-  error: '402 Payment Required',
-  status: 402,
-  details: {
-    success: false,
-    error: {
-      message:
-        'API key budget too low. This request costs ~0.0003 pollen, but this key has 0.0000.',
-      code: 'PAYMENT_REQUIRED',
-    },
-  },
-}
-
-const QUEUE_FULL = {
-  error: 'Queue full for IP: 203.0.113.7: 1 requests already queued (max: 1).',
-  status: 429,
+const RATE_LIMITED = {
+  success: false,
+  message: 'Rate limit reached: 10 requests per 60s. Retry in 12s.',
 }
 
 describe('chatService', () => {
   beforeEach(() => {
     resetChatState()
+    configureChat(CREDS)
     jest.spyOn(console, 'warn').mockImplementation(() => {})
   })
 
@@ -58,22 +62,15 @@ describe('chatService', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1)
   })
 
-  it('requests the anonymous-tier model with a referrer and a cache-busting seed', async () => {
-    const sent: RequestInit[] = []
-    const fetchImpl: typeof fetch = async (_url, init) => {
-      sent.push(init as RequestInit)
-      return reply('ok')
-    }
+  it('fails clearly when credentials were never configured', async () => {
+    resetChatState()
+    const fetchImpl = jest.fn(async () => reply('unreachable'))
 
-    await sendToChat('hi', [], { ...FAST, fetchImpl })
-
-    const body = JSON.parse(String(sent[0]?.body))
-    expect(body.model).toBe('openai-fast')
-    expect(typeof body.seed).toBe('number')
-    expect(body.referrer).toBeTruthy()
+    await expect(sendToChat('hi', [], { ...FAST, fetchImpl })).rejects.toThrow(/not configured/)
+    expect(fetchImpl).not.toHaveBeenCalled()
   })
 
-  it('sends a system prompt, trailing history and the current message', async () => {
+  it('sends credentials, a system prompt, trailing history and the current message', async () => {
     const sent: RequestInit[] = []
     const fetchImpl: typeof fetch = async (_url, init) => {
       sent.push(init as RequestInit)
@@ -87,6 +84,8 @@ describe('chatService', () => {
     await sendToChat('current', history, { ...FAST, fetchImpl })
 
     const body = JSON.parse(String(sent[0]?.body))
+    expect(body.appId).toBe(CREDS.appId)
+    expect(body.appSecret).toBe(CREDS.appSecret)
     expect(body.messages[0].role).toBe('system')
     // system + last 8 history + current, and the current message appears once
     expect(body.messages).toHaveLength(10)
@@ -94,61 +93,74 @@ describe('chatService', () => {
     expect(body.messages[9]).toEqual({ role: 'user', content: 'current' })
   })
 
-  it('does not retry a 402 — a drained pool cannot be fixed by retrying', async () => {
-    const fetchImpl = jest.fn(async () => failure(402, POLLEN_EXHAUSTED))
+  it('never sends a model or token count — the proxy chooses those', async () => {
+    const sent: RequestInit[] = []
+    const fetchImpl: typeof fetch = async (_url, init) => {
+      sent.push(init as RequestInit)
+      return reply('ok')
+    }
+
+    await sendToChat('hi', [], { ...FAST, fetchImpl })
+
+    const body = JSON.parse(String(sent[0]?.body))
+    expect(body.model).toBeUndefined()
+    expect(body.max_tokens).toBeUndefined()
+  })
+
+  it('does not retry rejected credentials', async () => {
+    const fetchImpl = jest.fn(async () =>
+      failure(401, { success: false, message: 'Invalid app credentials.' })
+    )
 
     await expect(sendToChat('hi', [], { ...FAST, fetchImpl })).rejects.toMatchObject({
-      status: 402,
+      status: 401,
       retryable: false,
     })
     expect(fetchImpl).toHaveBeenCalledTimes(1)
-  })
-
-  it("surfaces the server's own reason for a 402", async () => {
-    const fetchImpl = jest.fn(async () => failure(402, POLLEN_EXHAUSTED))
-
     await expect(sendToChat('hi', [], { ...FAST, fetchImpl })).rejects.toThrow(
-      /out of credit.*pollen/s
+      /Invalid app credentials/
     )
   })
 
-  it('retries a 429 queue-full and succeeds', async () => {
+  it('retries a 429 from the proxy and succeeds', async () => {
     const fetchImpl = jest
       .fn()
-      .mockResolvedValueOnce(failure(429, QUEUE_FULL))
+      .mockResolvedValueOnce(failure(429, RATE_LIMITED))
       .mockResolvedValueOnce(reply('recovered'))
 
     await expect(sendToChat('hi', [], { ...FAST, fetchImpl })).resolves.toBe('recovered')
     expect(fetchImpl).toHaveBeenCalledTimes(2)
   })
 
+  it('waits the Retry-After the proxy sends instead of its own backoff', async () => {
+    // Backoff would be ~5s; Retry-After says 0, so the retry should be immediate.
+    jest.spyOn(Math, 'random').mockReturnValue(0.999)
+    const fetchImpl = jest
+      .fn()
+      .mockResolvedValueOnce(failure(429, RATE_LIMITED, { 'Retry-After': '0' }))
+      .mockResolvedValueOnce(reply('recovered'))
+
+    const startedAt = Date.now()
+    await expect(
+      sendToChat('hi', [], {
+        ...FAST,
+        baseBackoffMs: 5_000,
+        maxBackoffMs: 5_000,
+        fetchImpl,
+      })
+    ).resolves.toBe('recovered')
+
+    expect(Date.now() - startedAt).toBeLessThan(1_000)
+    expect(fetchImpl).toHaveBeenCalledTimes(2)
+  })
+
   it('gives up after maxAttempts on a persistent 429', async () => {
-    const fetchImpl = jest.fn(async () => failure(429, QUEUE_FULL))
+    const fetchImpl = jest.fn(async () => failure(429, RATE_LIMITED))
 
     await expect(
       sendToChat('hi', [], { ...FAST, maxAttempts: 3, fetchImpl })
     ).rejects.toMatchObject({ status: 429, retryable: true })
     expect(fetchImpl).toHaveBeenCalledTimes(3)
-  })
-
-  it('does not retry a 404 retired model', async () => {
-    const fetchImpl = jest.fn(async () => failure(404, { error: 'Model not found: openai-large' }))
-
-    await expect(sendToChat('hi', [], { ...FAST, fetchImpl })).rejects.toMatchObject({
-      status: 404,
-      retryable: false,
-    })
-    expect(fetchImpl).toHaveBeenCalledTimes(1)
-  })
-
-  it('does not retry a 403 blocked IP', async () => {
-    const fetchImpl = jest.fn(async () => failure(403))
-
-    await expect(sendToChat('hi', [], { ...FAST, fetchImpl })).rejects.toMatchObject({
-      status: 403,
-      retryable: false,
-    })
-    expect(fetchImpl).toHaveBeenCalledTimes(1)
   })
 
   it('retries network failures', async () => {
@@ -161,20 +173,8 @@ describe('chatService', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(2)
   })
 
-  it('strips balanced and unterminated think blocks', async () => {
-    const balanced = jest.fn(async () => reply('<think>plan</think>Spoken answer.'))
-    await expect(sendToChat('hi', [], { ...FAST, fetchImpl: balanced })).resolves.toBe(
-      'Spoken answer.'
-    )
-
-    const cutOff = jest.fn(async () => reply('Answer first.<think>truncated reasoning'))
-    await expect(sendToChat('hi', [], { ...FAST, fetchImpl: cutOff })).resolves.toBe(
-      'Answer first.'
-    )
-  })
-
   it('falls back rather than returning an empty string', async () => {
-    const fetchImpl = jest.fn(async () => reply('<think>only reasoning</think>'))
+    const fetchImpl = jest.fn(async () => reply('   '))
     await expect(sendToChat('hi', [], { ...FAST, fetchImpl })).resolves.toBe(
       'Sorry, I could not generate a response.'
     )
@@ -190,7 +190,7 @@ describe('chatService', () => {
     expect(Date.now() - startedAt).toBeGreaterThanOrEqual(60)
   })
 
-  it('serialises overlapping calls — the server allows one in flight per IP', async () => {
+  it('serialises overlapping calls', async () => {
     let inFlight = 0
     let sawOverlap = false
     const fetchImpl = jest.fn(async () => {
