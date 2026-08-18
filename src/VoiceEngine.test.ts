@@ -782,6 +782,63 @@ describe('VoiceEngine Android platform branches', () => {
     expect(countAction('synthesize')).toBe(2) // both utterances still queued
   })
 
+  /** Park every enableCommunicationRoute() call — the last await in the Android prep. */
+  const parkRouteEntry = () => {
+    const parked: Array<() => void> = []
+    let announce: (n: number) => void = () => {}
+    const reached = (n: number) =>
+      new Promise<void>((resolve) => {
+        announce = (count) => {
+          if (count >= n) resolve()
+        }
+      })
+    enableCommunicationRoute.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          parked.push(resolve)
+          announce(parked.length)
+        })
+    )
+    return { release: () => parked.forEach((r) => r()), reached }
+  }
+
+  it('a stopListening() during the prep cancels every pending start, not just the first', async () => {
+    RN.Platform.OS = 'android'
+    // The cancel has to reach both waiters. Consuming a single shared flag cancels
+    // whichever resumes first and lets the other open the mic after the stop.
+    const route = parkRouteEntry()
+    const bothParked = route.reached(2)
+    voiceEngine.initialize('app-id', 'app-secret')
+
+    const first = voiceEngine.listen()
+    const second = voiceEngine.listen()
+    await bothParked
+    await voiceEngine.stopListening()
+    route.release()
+    await Promise.all([first, second])
+
+    expect(findAction('createEngine')).toBeUndefined()
+    expect(findAction('start')).toBeUndefined()
+  })
+
+  it('a stopListening() cancels a start still in prep while a session is running', async () => {
+    RN.Platform.OS = 'android'
+    voiceEngine.initialize('app-id', 'app-secret')
+    await voiceEngine.listen()
+
+    // This stop takes the real branch — there is an engine to stop — so it never
+    // recorded an intent for the in-flight start, which then restarted the mic.
+    const route = parkRouteEntry()
+    const parked = route.reached(1)
+    const pending = voiceEngine.listen()
+    await parked
+    await voiceEngine.stopListening()
+    route.release()
+    await pending
+
+    expect(countAction('start')).toBe(1)
+  })
+
   it('a stopListening() during the Android prep cancels the pending listen()', async () => {
     RN.Platform.OS = 'android'
     // Park the prep on the model copy, and signal when it gets there — the test has

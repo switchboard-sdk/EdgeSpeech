@@ -120,11 +120,13 @@ class VoiceEngine {
   private androidTtsVoice: string | null = null
 
   /**
-   * Android: a stopListening() that arrived while listen()/speak() was still in its
-   * async prep, when there is no engine to stop yet. The pending start aborts on it, so
-   * the mic never opens after the user asked it not to. iOS has no prep, hence no window.
+   * Android: bumped by every stopListening(). A start captures it before its first await
+   * and aborts if it changed while it ran, so the mic never opens after the user asked it
+   * not to. A counter rather than a flag because a flag cancels only whichever waiter
+   * consumes it — a second concurrent listen() would see it already cleared and start.
+   * iOS has no prep, hence no window.
    */
-  private androidStopRequested = false
+  private androidStopGeneration = 0
 
   /**
    * Pending Kotlin SDK init on Android. Awaited (and its outcome checked) by
@@ -466,8 +468,7 @@ class VoiceEngine {
    * @param stageTtsVoice also extract the TTS voice (speak() only).
    */
   private async prepareAndroidSession(stageTtsVoice = false): Promise<boolean> {
-    // A new start attempt supersedes any Stop left over from the last one.
-    this.androidStopRequested = false
+    const generation = this.androidStopGeneration
     await this.ensureAndroidInitialized()
     await this.ensureAndroidMicPermission()
     await this.ensureAndroidModel()
@@ -476,10 +477,9 @@ class VoiceEngine {
     }
     await this.enableAndroidCommunicationRoute()
 
-    if (!this.androidStopRequested) {
+    if (this.androidStopGeneration === generation) {
       return false
     }
-    this.androidStopRequested = false
     this.disableAndroidCommunicationRoute()
     return true
   }
@@ -537,12 +537,12 @@ class VoiceEngine {
   }
 
   async stopListening(): Promise<void> {
+    // Cancel any start still in its async prep — including when there is also a live
+    // session to stop below, since that prep would otherwise reopen the mic.
+    if (Platform.OS === 'android') {
+      this.androidStopGeneration++
+    }
     if (!this.engineId || !this.isListening) {
-      // Nothing to stop yet. On Android that can mean a start is mid-prep, so record
-      // the intent for prepareAndroidSession() to report back to it.
-      if (Platform.OS === 'android') {
-        this.androidStopRequested = true
-      }
       return
     }
     const res = this.ensureClient().callAction(this.engineId, 'stop', {})
@@ -896,7 +896,7 @@ class VoiceEngine {
     this.androidTtsLoaded = false
     this.androidTtsDir = null
     this.androidTtsVoice = null
-    this.androidStopRequested = false
+    this.androidStopGeneration = 0
     this.androidInitPromise = null
     this.config = {
       vadSensitivity: 0.5,
