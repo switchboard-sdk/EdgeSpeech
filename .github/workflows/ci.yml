@@ -23,7 +23,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ios/Frameworks
-          key: ios-frameworks-${{ hashFiles('scripts/postinstall.js') }}
+          key: ios-frameworks-${{ hashFiles('scripts/download-ios-frameworks.sh') }}
 
       - name: Install dependencies
         run: npm ci

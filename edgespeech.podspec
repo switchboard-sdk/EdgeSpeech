@@ -18,18 +18,23 @@ Pod::Spec.new do |s|
   # Privacy manifest — required for App Store submissions (Apple policy, May 2024+)
   s.resource_bundles = { 'edgespeech_privacy' => ['ios/PrivacyInfo.xcprivacy'] }
 
-  # Switchboard SDK + extension xcframeworks — downloaded into ios/Frameworks/ by
-  # scripts/postinstall.js. Whisper ships under a Release/ subdir with extra libs
-  # (whisper.xcframework etc.), auto-discovered below.
-  whisper_lib_frameworks = Dir[File.join(__dir__, 'ios/Frameworks/SwitchboardWhisper/ios/Release/lib/*.xcframework')].map { |f| f.sub("#{__dir__}/", '') }
+  # Fetch the Switchboard xcframeworks during `pod install` — keeps the binaries
+  # out of git and out of the npm tarball. Idempotent: skips if already present.
+  s.prepare_command = 'bash scripts/download-ios-frameworks.sh'
 
+  # Link the downloaded xcframeworks (each carries the C++ headers we compile
+  # against). Whisper nests everything under Release/, plus an extra
+  # whisper.xcframework under Release/lib/. Declared as explicit paths rather
+  # than globbed: the podspec is evaluated before prepare_command runs, so a
+  # Dir[] over ios/Frameworks/ would come back empty on a clean checkout.
   s.vendored_frameworks = [
     'ios/Frameworks/SwitchboardSDK/ios/SwitchboardSDK.xcframework',
     'ios/Frameworks/SwitchboardWhisper/ios/Release/SwitchboardWhisper.xcframework',
+    'ios/Frameworks/SwitchboardWhisper/ios/Release/lib/whisper.xcframework',
     'ios/Frameworks/SwitchboardSileroVAD/ios/SwitchboardSileroVAD.xcframework',
     'ios/Frameworks/SwitchboardOnnx/ios/SwitchboardOnnx.xcframework',
     'ios/Frameworks/SwitchboardSherpa/ios/SwitchboardSherpa.xcframework',
-  ] + whisper_lib_frameworks
+  ]
 
   # C++ headers we compile against live in each package's include/ dir (Whisper's
   # under Release/include). These carry SwitchboardJSONRPC.hpp + the *Extension.hpp

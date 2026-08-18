@@ -42,11 +42,16 @@ npm install
 ```
 
 > [!NOTE]
-> If the download is skipped (some package managers block install scripts), run it manually —
-> after the root `npm install`, since the script's dependencies live there:
+> The native payload isn't fetched at install time. The iOS xcframeworks download during
+> `pod install` (via the podspec's `prepare_command`) and the Android models during your first
+> Gradle build. Both are large and both are idempotent, so the first build of each platform is
+> slow and later ones skip the download.
+>
+> To fetch either ahead of time:
 >
 > ```bash
-> node ../scripts/postinstall.js
+> bash ../scripts/download-ios-frameworks.sh
+> (cd android && ./gradlew :synervoz_edgespeech:downloadModels)
 > ```
 
 Copy the environment file and add your credentials:

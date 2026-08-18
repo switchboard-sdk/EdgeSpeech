@@ -326,7 +326,8 @@ Default: Queue sequential `speak()` calls. Play in order.
 - SwitchboardWhisper (STT)
 - SwitchboardSherpa (TTS)
 
-These are the five packages `scripts/postinstall.js` downloads into `ios/Frameworks/`.
+These are the five packages `scripts/download-ios-frameworks.sh` downloads into `ios/Frameworks/`,
+run automatically by the podspec's `prepare_command` during `pod install`.
 
 ### Initialization
 

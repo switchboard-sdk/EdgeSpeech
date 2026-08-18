@@ -13,7 +13,7 @@ def safeExtGet(prop, fallback) {
     rootProject.ext.has(prop) ? rootProject.ext.get(prop) : fallback
 }
 
-// Matches the iOS SDK version (scripts/postinstall.js SDK_VERSION = release/3.2.3).
+// Must match the iOS framework version vendored via edgespeech.podspec.
 def switchboardSdkVersion = "3.2.3"
 
 // The app declares the Maven repo and Prefab itself (bare RN via the README's
@@ -65,3 +65,57 @@ dependencies {
     api "com.synervoz.switchboard.extensions:whisper:${switchboardSdkVersion}"
     api "com.synervoz.switchboard.extensions:sherpa:${switchboardSdkVersion}"
 }
+
+// On-device models. The AARs bundle none (the iOS frameworks bake the same models
+// in), so they're fetched into this module's own assets and Android's asset merge
+// folds them into the consuming app's APK — no app-side setup, Expo or bare RN.
+//
+// Override the set with -PedgespeechModels=whisper/ggml-base.en.bin,... or an
+// `edgespeechModels` entry in gradle.properties. Keep in step with
+// ANDROID_MODEL_ASSETS / ANDROID_TTS_VOICES in src/VoiceEngine.ts.
+def modelBaseUrl = "https://switchboard-sdk-public.s3.amazonaws.com/assets/models"
+// Only the assets the default config can reach: the one STT model, plus the voice
+// EdgeSpeechProvider defaults to. A session extracts a single voice, so bundling the others costs
+// APK size nothing can use — apps setting a different `ttsVoice` add its zip via edgespeechModels.
+def defaultModels = [
+    "whisper/ggml-base.en.bin",
+    "sherpa/tts/en_GB.zip",
+]
+def modelPaths = (findProperty("edgespeechModels")?.toString()?.trim()
+    ? findProperty("edgespeechModels").toString().split(",").collect { it.trim() }.findAll { it }
+    : defaultModels)
+def modelsRoot = file("src/main/assets/models")
+
+def downloadModels = tasks.register("downloadModels") {
+    description = "Downloads the on-device STT/TTS models into the library's assets."
+    group = "build setup"
+
+    inputs.property("baseUrl", modelBaseUrl)
+    inputs.property("paths", modelPaths)
+    outputs.files(modelPaths.collect { new File(modelsRoot, it) })
+
+    doLast {
+        modelPaths.each { rel ->
+            def dest = new File(modelsRoot, rel)
+            if (dest.exists()) {
+                return
+            }
+            dest.parentFile.mkdirs()
+            // Download to a sidecar first so an interrupted run can't leave a
+            // truncated file that later looks complete.
+            def part = new File("${dest}.part")
+            logger.lifecycle("EdgeSpeech: downloading ${rel}")
+            new URL("${modelBaseUrl}/${rel}").withInputStream { input ->
+                part.withOutputStream { output -> output << input }
+            }
+            if (!part.renameTo(dest)) {
+                throw new GradleException("EdgeSpeech: could not move ${part} into place")
+            }
+        }
+    }
+}
+
+// The models have to be on disk before anything packages assets, and preBuild is the one hook that
+// always runs. Wiring keyed on AGP asset-task names is finer-grained but fails silently when a name
+// stops matching: the build stays green and the APK ships without models.
+tasks.named("preBuild") { dependsOn(downloadModels) }

@@ -53,24 +53,29 @@ works in both Expo (prebuild) and bare React Native apps — it does **not** use
 
 ### Setup
 
-**1. Install the package and its native payload.**
+**1. Install the package.**
 
 ```bash
 npm install @synervoz/edgespeech
-node node_modules/@synervoz/edgespeech/scripts/postinstall.js
 ```
 
-The second command is the `postinstall` script: it downloads the native Switchboard frameworks into
-`ios/Frameworks/` and, for Android, the STT/TTS model files into `android/src/main/assets/` (merged
-into your APK) — they aren't bundled in the package. Android needs the separate download because the
-iOS frameworks bake the same models in and the Android AARs don't. It is a large download, so give
-it time; nothing builds until it has run.
+The native payload isn't bundled in the npm package — each platform's build fetches it, so nothing
+extra to run by hand.
 
-It runs automatically on `npm install`. Run it manually if your package manager skipped it — it
-re-checks the files and skips anything already downloaded, so it is safe to run at any time.
+On Android, the STT/TTS models download during your first build into the library's own assets, which
+Android's asset merge folds into your APK. The AARs bundle no models (the iOS frameworks bake the
+same ones in), which is why Android needs the separate fetch. Give the first build time; later
+builds skip it.
 
-Skip the models with `EDGESPEECH_SKIP_ANDROID_MODELS=1`; to re-fetch just those, run
-`node node_modules/@synervoz/edgespeech/scripts/download-android-models.js`.
+The default set covers the default config — the STT model and the `en_GB` voice. A session extracts
+one voice, so if you set `ttsVoice="de_DE"` bundle its zip too, or `speak()` fails at runtime with
+`TTS_MODEL_LOAD_FAILED`. Pass a comma-separated list to change the set:
+
+```bash
+./gradlew :app:assembleDebug -PedgespeechModels=whisper/ggml-base.en.bin,sherpa/tts/de_DE.zip
+```
+
+or put `edgespeechModels=…` in `gradle.properties`.
 
 **2. Install NDK r29.** Both paths need it, before your first Android build:
 
@@ -171,6 +176,15 @@ android {
   buildFeatures { prefab true }
   packagingOptions { jniLibs { useLegacyPackaging true } }
 }
+
+// Runs EdgeSpeech's codegen before this app's native build — without it, Android builds
+// can fail on a missing codegen/jni dir. Expo apps get this from the config plugin.
+apply from: new File(
+  providers.exec {
+    workingDir(rootDir)
+    commandLine("node", "--print", "require.resolve('@synervoz/edgespeech/package.json')")
+  }.standardOutput.asText.get().trim()
+).parentFile.toPath().resolve("android/edgespeech-app.gradle").toFile()
 ```
 
 In `android/gradle.properties`:

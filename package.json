@@ -22,8 +22,7 @@
     "react-native.config.js",
     "app.plugin.js",
     "plugin",
-    "scripts/postinstall.js",
-    "scripts/download-android-models.js",
+    "scripts/download-ios-frameworks.sh",
     "README.md",
     "!ios/Frameworks",
     "!android/src/main/assets/models",
@@ -35,7 +34,6 @@
   ],
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.build.json",
-    "postinstall": "node scripts/postinstall.js",
     "test": "jest --verbose",
     "test:integration": "jest --config jest.integration.config.js",
     "format": "prettier --write .",
@@ -97,10 +95,6 @@
   },
   "engines": {
     "node": ">=22"
-  },
-  "dependencies": {
-    "@aws-sdk/client-s3": "^3.1062.0",
-    "@clack/prompts": "^1.4.0"
   },
   "codegenConfig": {
     "name": "RNEdgeSpeechSpec",
