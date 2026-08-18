@@ -41,6 +41,32 @@ function withPrefab(config) {
   })
 }
 
+// Apply android/edgespeech-app.gradle into the app module. That file carries the app-side Gradle
+// wiring the library can't declare from its own project — currently ordering the app's CMake
+// configure after our codegen; see its header for why. Bare React Native apps apply the same file
+// by hand, so both paths share one source of truth.
+//
+// The path comes from `node --print require.resolve(...)` rather than a relative ../node_modules
+// walk so it survives monorepos, pnpm and hoisting; providers.exec keeps it configuration-cache safe.
+const APPLY_ANCHOR = "require.resolve('@synervoz/edgespeech/package.json')"
+
+function withAppGradle(config) {
+  return withAppBuildGradle(config, (cfg) => {
+    if (cfg.modResults.language !== 'groovy') return cfg
+    if (cfg.modResults.contents.includes(APPLY_ANCHOR)) return cfg
+    cfg.modResults.contents += `
+// EdgeSpeech: app-side Gradle wiring shipped with the library (see its header).
+apply from: new File(
+  providers.exec {
+    workingDir(rootDir)
+    commandLine("node", "--print", "${APPLY_ANCHOR}")
+  }.standardOutput.asText.get().trim()
+).parentFile.toPath().resolve("android/edgespeech-app.gradle").toFile()
+`
+    return cfg
+  })
+}
+
 // Raise the app's ndkVersion (see MIN_NDK_VERSION above for why). Expo has no
 // first-party knob for this — expo-build-properties exposes min/compile/targetSdk,
 // buildTools, cmake and kotlin versions, but not the NDK — so the plugin edits
@@ -131,6 +157,7 @@ function withoutX86(config) {
 const withEdgeSpeech = (config) => {
   config = withSwitchboardMavenRepo(config)
   config = withPrefab(config)
+  config = withAppGradle(config)
   config = withNdkVersion(config)
   config = withLegacyPackaging(config)
   config = withoutX86(config)

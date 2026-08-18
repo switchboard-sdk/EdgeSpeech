@@ -113,4 +113,7 @@ def downloadModels = tasks.register("downloadModels") {
     }
 }
 
+// The models have to be on disk before anything packages assets, and preBuild is the one hook that
+// always runs. Wiring keyed on AGP asset-task names is finer-grained but fails silently when a name
+// stops matching: the build stays green and the APK ships without models.
 tasks.named("preBuild") { dependsOn(downloadModels) }

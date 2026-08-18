@@ -173,6 +173,15 @@ android {
   buildFeatures { prefab true }
   packagingOptions { jniLibs { useLegacyPackaging true } }
 }
+
+// Runs EdgeSpeech's codegen before this app's native build — without it, Android builds
+// can fail on a missing codegen/jni dir. Expo apps get this from the config plugin.
+apply from: new File(
+  providers.exec {
+    workingDir(rootDir)
+    commandLine("node", "--print", "require.resolve('@synervoz/edgespeech/package.json')")
+  }.standardOutput.asText.get().trim()
+).parentFile.toPath().resolve("android/edgespeech-app.gradle").toFile()
 ```
 
 In `android/gradle.properties`:
