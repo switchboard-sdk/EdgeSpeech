@@ -20,6 +20,8 @@ import java.util.concurrent.atomic.AtomicBoolean
  * headset, else the built-in loudspeaker
  * (never the earpiece). Called from VoiceEngine.ts on start/stop; needs
  * MODIFY_AUDIO_SETTINGS. Route is fixed at start — no mid-call re-detection.
+ * Mode and route are process-wide, so whatever the host app had is captured on
+ * enable and restored on disable.
  */
 class EdgeSpeechAudioSessionModule(private val reactContext: ReactApplicationContext) :
   ReactContextBaseJavaModule(reactContext) {
@@ -29,11 +31,36 @@ class EdgeSpeechAudioSessionModule(private val reactContext: ReactApplicationCon
   private val audioManager: AudioManager
     get() = reactContext.applicationContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
 
+  /** What the host app had before we took the route over. Null when we don't hold it. */
+  private class SavedAudioState(
+    val mode: Int,
+    val communicationDevice: AudioDeviceInfo?,
+    val speakerphoneOn: Boolean,
+    val bluetoothScoOn: Boolean,
+  )
+
+  private var savedState: SavedAudioState? = null
+
+  /**
+   * Record the host app's audio state, once per acquisition — a second enable must not
+   * overwrite it with our own settings.
+   */
+  @Suppress("DEPRECATION")
+  private fun captureAudioState(am: AudioManager) {
+    if (savedState != null) {
+      return
+    }
+    val device =
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) am.communicationDevice else null
+    savedState = SavedAudioState(am.mode, device, am.isSpeakerphoneOn, am.isBluetoothScoOn)
+  }
+
   /** Enter communication mode; route to a connected headset if present, else the loudspeaker. */
   @ReactMethod
   fun enableCommunicationRoute(promise: Promise) {
     try {
       val am = audioManager
+      captureAudioState(am)
       am.mode = AudioManager.MODE_IN_COMMUNICATION
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         val devices = am.availableCommunicationDevices
@@ -89,22 +116,43 @@ class EdgeSpeechAudioSessionModule(private val reactContext: ReactApplicationCon
     Handler(Looper.getMainLooper()).postDelayed({ finish() }, ROUTE_TIMEOUT_MS)
   }
 
-  /** Restore the normal audio mode/route when the engine stops. */
+  /**
+   * Give the route back, restoring what enableCommunicationRoute() found. Mode and
+   * communication device are process-wide, so a hardcoded MODE_NORMAL here would end a
+   * call the host app was running alongside us.
+   */
   @ReactMethod
   fun disableCommunicationRoute(promise: Promise) {
     try {
+      // A stop with no matching start — e.g. the engine failed before the route was
+      // entered. Nothing of ours to undo, and the host's state isn't ours to change.
+      val saved = savedState
+      if (saved == null) {
+        promise.resolve(null)
+        return
+      }
       val am = audioManager
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-        am.clearCommunicationDevice()
+        // Re-select a device only if the host was itself in a communication mode.
+        // Otherwise communicationDevice merely reported the system's default, and
+        // pinning that would leave the app forcing a route it never asked for.
+        val device = saved.communicationDevice
+        if (saved.mode != AudioManager.MODE_NORMAL && device != null) {
+          am.setCommunicationDevice(device)
+        } else {
+          am.clearCommunicationDevice()
+        }
       } else {
         @Suppress("DEPRECATION")
         run {
-          am.stopBluetoothSco()
-          am.isBluetoothScoOn = false
-          am.isSpeakerphoneOn = false
+          if (saved.bluetoothScoOn) am.startBluetoothSco() else am.stopBluetoothSco()
+          am.isBluetoothScoOn = saved.bluetoothScoOn
+          am.isSpeakerphoneOn = saved.speakerphoneOn
         }
       }
-      am.mode = AudioManager.MODE_NORMAL
+      am.mode = saved.mode
+      // Only on success: a failed restore keeps the state for the next stop to retry.
+      savedState = null
       promise.resolve(null)
     } catch (e: Exception) {
       promise.reject("audio_session_error", e)
