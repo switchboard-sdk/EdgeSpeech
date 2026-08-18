@@ -484,6 +484,24 @@ class VoiceEngine {
     return true
   }
 
+  /**
+   * Undo a start that threw after prep entered the communication route. stopListening()
+   * cannot help there — it early-returns while isListening is false — so the app would
+   * be left in MODE_IN_COMMUNICATION with no way back. A session that is still running
+   * keeps the route, which it needs. Android-only: iOS has no route to give back, and
+   * leaves a failed start's engine in place to retry, as it always has.
+   */
+  private rollbackFailedStart(): void {
+    if (Platform.OS !== 'android' || this.isListening || this.isSpeaking) {
+      return
+    }
+    if (this.engineId) {
+      this.destroyEngine() // gives the route back too
+    } else {
+      this.disableAndroidCommunicationRoute()
+    }
+  }
+
   /** Start the engine. Synchronous — the Android route is entered during prep. */
   private startEngineSync(): void {
     const res = this.ensureClient().callAction(this.engineId!, 'start', {})
@@ -504,13 +522,18 @@ class VoiceEngine {
 
     // No `await` past this line: JS runs an await-free stretch to completion, which is
     // what stops a double tap from starting the engine twice. iOS never suspends above.
-    if (!this.engineId) {
-      this.createEngine()
+    try {
+      if (!this.engineId) {
+        this.createEngine()
+      }
+      if (this.isListening) {
+        return
+      }
+      this.startEngineSync()
+    } catch (e) {
+      this.rollbackFailedStart()
+      throw e
     }
-    if (this.isListening) {
-      return
-    }
-    this.startEngineSync()
   }
 
   async stopListening(): Promise<void> {
@@ -544,17 +567,23 @@ class VoiceEngine {
     }
 
     // No `await` past this line — see listen().
-    if (!this.engineId) {
-      this.createEngine()
-    }
-    // Load the TTS voice lazily on first speak (Android; iOS auto-loads it).
-    this.loadAndroidTtsVoice()
-    // Starting the engine also activates the mic + AEC needed for barge-in.
-    if (!this.isListening) {
-      this.startEngineSync()
-    }
+    let res
+    try {
+      if (!this.engineId) {
+        this.createEngine()
+      }
+      // Load the TTS voice lazily on first speak (Android; iOS auto-loads it).
+      this.loadAndroidTtsVoice()
+      // Starting the engine also activates the mic + AEC needed for barge-in.
+      if (!this.isListening) {
+        this.startEngineSync()
+      }
 
-    const res = this.ensureClient().callAction('ttsNode', 'synthesize', { text })
+      res = this.ensureClient().callAction('ttsNode', 'synthesize', { text })
+    } catch (e) {
+      this.rollbackFailedStart()
+      throw e
+    }
     if (res.error) {
       throw this.makeError('SPEAK_FAILED', res.error.message)
     }

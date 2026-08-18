@@ -493,6 +493,75 @@ describe('VoiceEngine Android platform branches', () => {
     expect(findAction('start')).toBeDefined()
   })
 
+  it('gives the communication route back when the engine fails to start', async () => {
+    RN.Platform.OS = 'android'
+    // Prep entered the route before this point. stopListening() early-returns while
+    // isListening is false, so a leak here leaves the app in MODE_IN_COMMUNICATION
+    // with nothing the caller can do about it.
+    native.default.processCommand.mockImplementation((cmd: string) => {
+      const { id, method, params } = JSON.parse(cmd)
+      if (method === 'callAction' && params?.actionName === 'createEngine') {
+        return JSON.stringify({ jsonrpc: '2.0', id, result: 'engine_1' })
+      }
+      if (params?.actionName === 'start') {
+        return JSON.stringify({ jsonrpc: '2.0', id, error: { code: -32000, message: 'no mic' } })
+      }
+      return JSON.stringify({ jsonrpc: '2.0', id, result: null })
+    })
+
+    voiceEngine.initialize('app-id', 'app-secret')
+    await expect(voiceEngine.listen()).rejects.toMatchObject({ code: 'LISTEN_FAILED' })
+
+    expect(disableCommunicationRoute).toHaveBeenCalled()
+  })
+
+  it('gives the communication route back when the TTS voice fails to load', async () => {
+    RN.Platform.OS = 'android'
+    native.default.processCommand.mockImplementation((cmd: string) => {
+      const { id, method, params } = JSON.parse(cmd)
+      if (method === 'callAction' && params?.actionName === 'createEngine') {
+        return JSON.stringify({ jsonrpc: '2.0', id, result: 'engine_1' })
+      }
+      if (params?.actionName === 'loadModel' && params?.objectURI === 'ttsNode') {
+        return JSON.stringify({ jsonrpc: '2.0', id, error: { code: -32000, message: 'bad voice' } })
+      }
+      return JSON.stringify({ jsonrpc: '2.0', id, result: null })
+    })
+
+    voiceEngine.initialize('app-id', 'app-secret')
+    await expect(voiceEngine.speak('hello')).rejects.toMatchObject({
+      code: 'TTS_MODEL_LOAD_FAILED',
+    })
+
+    expect(disableCommunicationRoute).toHaveBeenCalled()
+    expect(findAction('start')).toBeUndefined()
+  })
+
+  it('keeps the route when a failed speak() leaves a listening session running', async () => {
+    RN.Platform.OS = 'android'
+    native.default.processCommand.mockImplementation((cmd: string) => {
+      const { id, method, params } = JSON.parse(cmd)
+      if (method === 'callAction' && params?.actionName === 'createEngine') {
+        return JSON.stringify({ jsonrpc: '2.0', id, result: 'engine_1' })
+      }
+      if (params?.actionName === 'synthesize') {
+        return JSON.stringify({ jsonrpc: '2.0', id, error: { code: -32000, message: 'busy' } })
+      }
+      return JSON.stringify({ jsonrpc: '2.0', id, result: null })
+    })
+
+    const states: string[] = []
+    voiceEngine.addListener('onStateChange', (e) => states.push(e.state))
+    voiceEngine.initialize('app-id', 'app-secret')
+    await voiceEngine.listen()
+    await expect(voiceEngine.speak('hello')).rejects.toMatchObject({ code: 'SPEAK_FAILED' })
+
+    // The mic is still open and the graph still running — it needs the route.
+    expect(disableCommunicationRoute).not.toHaveBeenCalled()
+    expect(states.at(-1)).toBe('listening')
+    expect(countAction('stop')).toBe(0)
+  })
+
   it('rejects an unknown sttModel, without opening the mic', async () => {
     RN.Platform.OS = 'android'
     voiceEngine.initialize('app-id', 'app-secret')
