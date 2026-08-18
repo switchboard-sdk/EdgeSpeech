@@ -67,15 +67,21 @@ Android's asset merge folds into your APK. The AARs bundle no models (the iOS fr
 same ones in), which is why Android needs the separate fetch. Give the first build time; later
 builds skip it.
 
-The default set covers the default config — the STT model and the `en_GB` voice. A session extracts
-one voice, so if you set `ttsVoice="de_DE"` bundle its zip too, or `speak()` fails at runtime with
-`TTS_MODEL_LOAD_FAILED`. Pass a comma-separated list to change the set:
+The default set covers the default config — `whisper-base-en` and the `en_GB` voice. A session loads
+one STT model and extracts one voice, so anything else has to be asked for: set `ttsVoice="de_DE"`
+without bundling its zip and `speak()` fails at runtime with `TTS_MODEL_LOAD_FAILED`; set
+`sttModel="whisper-tiny-en"` without bundling it and `start()` fails with `MODEL_UNAVAILABLE`. Pass
+a comma-separated list to change the set:
 
 ```bash
-./gradlew :app:assembleDebug -PedgespeechModels=whisper/ggml-base.en.bin,sherpa/tts/de_DE.zip
+./gradlew :app:assembleDebug -PedgespeechModels=whisper/ggml-tiny.en.bin,sherpa/tts/de_DE.zip
 ```
 
 or put `edgespeechModels=…` in `gradle.properties`.
+
+`whisper-tiny-en` (`whisper/ggml-tiny.en.bin`, 74 MB) halves the 141 MB of the default
+`whisper-base-en` and decodes faster, at a real cost in accuracy. It is **Android-only** — on iOS
+the Switchboard framework bakes in the base model and `sttModel` is ignored.
 
 **2. Install NDK r29.** Both paths need it, before your first Android build:
 
@@ -208,7 +214,8 @@ Wrap your app in the `EdgeSpeechProvider` and configure it.
 <EdgeSpeechProvider
   appId="YOUR_APP_ID"         // Optional: Switchboard app ID
   appSecret="YOUR_APP_SECRET" // Optional: Switchboard app secret
-  sttModel="whisper-base-en"  // Optional: STT model (default: 'whisper-base-en')
+  sttModel="whisper-base-en"  // Optional: 'whisper-base-en' | 'whisper-tiny-en' — Android only
+                              //           (default: 'whisper-base-en'; see Android setup)
   ttsVoice="en_GB"            // Optional: 'en_GB' | 'de_DE' — Android only (default: 'en_GB')
   vadSensitivity={0.5}        // Optional: VAD sensitivity 0.0–1.0 (default: 0.5)
 >

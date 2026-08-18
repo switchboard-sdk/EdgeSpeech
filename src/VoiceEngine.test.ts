@@ -452,15 +452,45 @@ describe('VoiceEngine Android platform branches', () => {
     expect(ttsLoadCall()!.params.params.modelPath).toContain('en_GB-southern_english_female-low')
   })
 
-  it('rejects an sttModel that is not bundled, without opening the mic', async () => {
+  it('rejects an unknown sttModel, without opening the mic', async () => {
     RN.Platform.OS = 'android'
     voiceEngine.initialize('app-id', 'app-secret')
-    // Android ships exactly the model the iOS framework bundles — nothing else
-    // resolves, so asking for one fails loudly rather than silently using base.
-    voiceEngine.configure({ sttModel: 'whisper-tiny-en' })
+    // Only the models with an asset mapping resolve, so asking for another fails
+    // loudly rather than silently using base.
+    voiceEngine.configure({ sttModel: 'whisper-small-en' })
 
     await expect(voiceEngine.listen()).rejects.toMatchObject({ code: 'MODEL_UNAVAILABLE' })
     expect(prepareModel).not.toHaveBeenCalled()
+    expect(findAction('start')).toBeUndefined()
+  })
+
+  it('stages and loads the tiny model when sttModel selects it', async () => {
+    RN.Platform.OS = 'android'
+    const tinyPath = `${FILES_DIR}/models/whisper/ggml-tiny.en.bin`
+    prepareModel.mockResolvedValue(tinyPath)
+    voiceEngine.configure({ sttModel: 'whisper-tiny-en' })
+    voiceEngine.initialize('app-id', 'app-secret')
+    await voiceEngine.listen()
+
+    expect(prepareModel).toHaveBeenCalledWith('models/whisper/ggml-tiny.en.bin')
+    expect(findAction('loadModel')!.params.params.modelPath).toBe(tinyPath)
+  })
+
+  it('reports a known sttModel whose asset was left out of the build', async () => {
+    RN.Platform.OS = 'android'
+    // The default Gradle download set carries base only, so a build that never opted
+    // tiny in has no such asset. The fix is a build change — say so, and say how.
+    const missing = Object.assign(new Error('Model asset is not bundled in this build.'), {
+      code: 'model_asset_missing',
+    })
+    prepareModel.mockRejectedValue(missing)
+    voiceEngine.configure({ sttModel: 'whisper-tiny-en' })
+    voiceEngine.initialize('app-id', 'app-secret')
+
+    await expect(voiceEngine.listen()).rejects.toMatchObject({
+      code: 'MODEL_UNAVAILABLE',
+      message: expect.stringContaining('edgespeechModels'),
+    })
     expect(findAction('start')).toBeUndefined()
   })
 

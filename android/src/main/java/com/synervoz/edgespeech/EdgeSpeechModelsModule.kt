@@ -7,6 +7,7 @@ import com.facebook.react.bridge.ReactMethod
 import com.synervoz.switchboard.sdk.Switchboard
 import java.io.BufferedInputStream
 import java.io.File
+import java.io.FileNotFoundException
 import java.util.zip.ZipInputStream
 import org.json.JSONObject
 
@@ -74,6 +75,14 @@ class EdgeSpeechModelsModule(private val reactContext: ReactApplicationContext) 
         dest.outputStream().use { output -> input.copyTo(output, 1 shl 16) }
       }
       promise.resolve(dest.absolutePath)
+    } catch (e: FileNotFoundException) {
+      // The asset isn't in the APK — the app configured a model outside the set the
+      // build downloaded. Its own code so JS can tell it from a genuine copy failure.
+      promise.reject(
+        "model_asset_missing",
+        "Model asset '$assetPath' is not bundled in this build.",
+        e,
+      )
     } catch (e: Exception) {
       promise.reject(
         "model_prepare_error",

@@ -13,7 +13,11 @@ export interface VoiceConfig {
   /** Switchboard app secret (required) */
   appSecret: string
 
-  /** STT model to use (optional, default: 'whisper-base-en') */
+  /**
+   * STT model: 'whisper-base-en' | 'whisper-tiny-en' (optional, default: 'whisper-base-en').
+   * Android only — iOS always uses the base model bundled in the Switchboard framework.
+   * 'whisper-tiny-en' must be added to the `edgespeechModels` Gradle property to be in the build.
+   */
   sttModel?: string
 
   /** TTS voice: 'en_GB' | 'de_DE' (optional, default: 'en_GB'; Android only) */

@@ -37,12 +37,18 @@ interface VoiceEngineConfig {
   sttModel: string
 }
 
-// Maps `sttModel` → bundled asset path (Android; iOS uses the SDK-framework model).
-// Deliberately the same single model the iOS framework ships, so `sttModel` means
-// the same thing on both platforms.
+// Maps `sttModel` → bundled asset path (Android only; iOS ignores `sttModel` and uses
+// the base model in the SDK framework). Gradle downloads base by default; tiny is half
+// the size, less accurate, and bundled only via the `edgespeechModels` property.
 const ANDROID_MODEL_ASSETS: Record<string, string> = {
   'whisper-base-en': 'models/whisper/ggml-base.en.bin',
+  'whisper-tiny-en': 'models/whisper/ggml-tiny.en.bin',
 }
+
+// The `edgespeechModels` Gradle property names assets relative to the assets/models root,
+// so the download list reads `whisper/ggml-tiny.en.bin` where this file says
+// `models/whisper/ggml-tiny.en.bin`. Only used to phrase the not-bundled error.
+const ANDROID_MODEL_ASSET_ROOT = 'models/'
 
 // Android Sherpa TTS voices keyed by `ttsVoice`: bundled zip + in-zip paths.
 // Extracted to filesDir once; iOS uses the SDK-framework voices.
@@ -336,6 +342,17 @@ class VoiceEngine {
     try {
       this.androidModelPath = await models.prepareModel(assetPath)
     } catch (e) {
+      // A known sttModel whose asset never made it into the APK: the app asked for a
+      // model outside the default download set. Separated from a genuine copy failure
+      // (no space, unreadable) because the fix is a build change, not a runtime one.
+      if ((e as { code?: string })?.code === 'model_asset_missing') {
+        throw this.makeError(
+          'MODEL_UNAVAILABLE',
+          `sttModel '${this.config.sttModel}' is not bundled in this build. Add ` +
+            `'${assetPath.slice(ANDROID_MODEL_ASSET_ROOT.length)}' to the edgespeechModels ` +
+            `Gradle property and rebuild.`
+        )
+      }
       throw this.makeError(
         'MODEL_LOAD_FAILED',
         `Failed to prepare Whisper model '${assetPath}': ${(e as Error)?.message ?? String(e)}`

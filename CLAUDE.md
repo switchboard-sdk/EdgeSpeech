@@ -221,6 +221,29 @@ The `speechEnded` event provides `start` and `end` timestamps that are automatic
 }
 ```
 
+### STT Models
+
+`Whisper.STT` picks its model one of two ways:
+
+- **Default** — the node resolves a bundled path in its constructor. On iOS that path is hardcoded
+  to `ggml-base.en.bin` inside `SwitchboardWhisper.framework` (`src/apple/ModelFile.mm`), so
+  `sttModel` cannot change it. The Android AARs bundle nothing, so there is no default there.
+- **`loadModel` action** — `{ modelPath, useGPU }`, shared C++ (`WhisperSTTNode.cpp`), works on both
+  platforms with any ggml `.bin` on disk. Android uses it for every session.
+
+Two English models are hosted at `…/assets/models/whisper/`: `ggml-base.en.bin` (141 MB) and
+`ggml-tiny.en.bin` (74 MB). Both are wired as `sttModel` values (`whisper-base-en`,
+`whisper-tiny-en`) in `ANDROID_MODEL_ASSETS`, but only base is in the Gradle `defaultModels` — tiny
+has to be opted into with `-PedgespeechModels=whisper/ggml-tiny.en.bin`, and asking for an
+unbundled model fails at `listen()` with `MODEL_UNAVAILABLE` (Kotlin rejects `prepareModel` with
+`model_asset_missing`).
+
+**CoreML caveat if tiny is ever taken to iOS:** whisper.cpp on iOS is built with CoreML and derives
+its encoder path from the model path (`<model>-encoder.mlmodelc`). The framework ships
+`ggml-base.en-encoder.mlmodelc` but no tiny equivalent, and none is hosted — a side-loaded tiny.en
+would run without the CoreML encoder, so it could well be _slower_ than base.en despite being half
+the size.
+
 ### TTS Voices (IMPORTANT)
 
 `Sherpa.TTS` takes **no voice config**. Its only accepted config key is `text`; anything else logs

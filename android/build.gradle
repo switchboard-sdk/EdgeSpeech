@@ -74,9 +74,10 @@ dependencies {
 // `edgespeechModels` entry in gradle.properties. Keep in step with
 // ANDROID_MODEL_ASSETS / ANDROID_TTS_VOICES in src/VoiceEngine.ts.
 def modelBaseUrl = "https://switchboard-sdk-public.s3.amazonaws.com/assets/models"
-// Only the assets the default config can reach: the one STT model, plus the voice
-// EdgeSpeechProvider defaults to. A session extracts a single voice, so bundling the others costs
-// APK size nothing can use — apps setting a different `ttsVoice` add its zip via edgespeechModels.
+// Only the assets the default config can reach: the default STT model, plus the voice
+// EdgeSpeechProvider defaults to. A session loads a single model and a single voice, so bundling
+// the alternatives costs APK size nothing can use — apps setting a different `sttModel`
+// (whisper/ggml-tiny.en.bin) or `ttsVoice` (sherpa/tts/de_DE.zip) add those via edgespeechModels.
 def defaultModels = [
     "whisper/ggml-base.en.bin",
     "sherpa/tts/en_GB.zip",
