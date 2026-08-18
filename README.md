@@ -64,15 +64,18 @@ extra to run by hand.
 
 On Android, the STT/TTS models download during your first build into the library's own assets, which
 Android's asset merge folds into your APK. The AARs bundle no models (the iOS frameworks bake the
-same ones in), which is why Android needs the separate fetch. It's roughly 270 MB, so give the first
-build time; later builds skip it. To narrow the set, pass a comma-separated list:
+same ones in), which is why Android needs the separate fetch. Give the first build time; later
+builds skip it.
+
+The default set covers the default config — the STT model and the `en_GB` voice. A session extracts
+one voice, so if you set `ttsVoice="de_DE"` bundle its zip too, or `speak()` fails at runtime with
+`TTS_MODEL_LOAD_FAILED`. Pass a comma-separated list to change the set:
 
 ```bash
-./gradlew assembleDebug -PedgespeechModels=whisper/ggml-base.en.bin,sherpa/tts/en_GB.zip
+./gradlew :app:assembleDebug -PedgespeechModels=whisper/ggml-base.en.bin,sherpa/tts/de_DE.zip
 ```
 
-or put `edgespeechModels=…` in `gradle.properties`. Re-fetch on demand with
-`./gradlew :edgespeech:downloadModels`.
+or put `edgespeechModels=…` in `gradle.properties`.
 
 **2. Install NDK r29.** Both paths need it, before your first Android build:
 
