@@ -140,6 +140,21 @@ describe('chatService', () => {
     )
   })
 
+  it('surfaces the nested error shape the API returns for validation failures', async () => {
+    // Exactly what the deployed endpoint returns for an empty messages array.
+    const fetchImpl = jest.fn(async () =>
+      failure(400, {
+        success: false,
+        error: { code: 10001, message: '"messages" must contain at least 1 items' },
+      })
+    )
+
+    await expect(sendToChat('hi', [], { ...FAST, fetchImpl })).rejects.toThrow(
+      /must contain at least 1 items/
+    )
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+  })
+
   it('retries a 429 and succeeds', async () => {
     const fetchImpl = jest
       .fn()
