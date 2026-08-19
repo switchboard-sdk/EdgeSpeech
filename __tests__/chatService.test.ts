@@ -93,7 +93,7 @@ describe('chatService', () => {
     expect(body.messages[9]).toEqual({ role: 'user', content: 'current' })
   })
 
-  it('never sends a model or token count — the proxy chooses those', async () => {
+  it('never sends a model or token count — the API chooses those', async () => {
     const sent: RequestInit[] = []
     const fetchImpl: typeof fetch = async (_url, init) => {
       sent.push(init as RequestInit)
@@ -121,8 +121,8 @@ describe('chatService', () => {
     configureChat({ ...CREDS, apiBaseUrl: 'https://api.example.test/' })
     await sendToChat('hi', [], { ...FAST, fetchImpl })
 
-    expect(urls[0]).toBe('https://api.switchboard.audio/openai/chat')
-    expect(urls[1]).toBe('https://api.example.test/openai/chat')
+    expect(urls[0]).toBe('https://api.switchboard.audio/chat')
+    expect(urls[1]).toBe('https://api.example.test/chat')
   })
 
   it('does not retry rejected credentials', async () => {
@@ -140,7 +140,7 @@ describe('chatService', () => {
     )
   })
 
-  it('retries a 429 from the proxy and succeeds', async () => {
+  it('retries a 429 and succeeds', async () => {
     const fetchImpl = jest
       .fn()
       .mockResolvedValueOnce(failure(429, RATE_LIMITED))
@@ -150,7 +150,7 @@ describe('chatService', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(2)
   })
 
-  it('waits the Retry-After the proxy sends instead of its own backoff', async () => {
+  it('waits the Retry-After the server sends instead of its own backoff', async () => {
     // Backoff would be ~5s; Retry-After says 0, so the retry should be immediate.
     jest.spyOn(Math, 'random').mockReturnValue(0.999)
     const fetchImpl = jest

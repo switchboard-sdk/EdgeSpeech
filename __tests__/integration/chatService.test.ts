@@ -2,8 +2,8 @@
  * Integration test for chatService.
  * Hits the real Switchboard chat proxy — run with: npm run test:integration
  *
- * Requires SWITCHBOARD_APP_ID and SWITCHBOARD_APP_SECRET for an app that has an
- * OpenAI key set on its config in the console. Skipped when they are absent.
+ * Requires SWITCHBOARD_APP_ID and SWITCHBOARD_APP_SECRET for an app that has chat
+ * enabled. Skipped when they are absent.
  */
 
 import { sendToChat, configureChat } from '../../example/services/chatService'

@@ -5,23 +5,23 @@ The app has two sections: **Voice Input** for transcription (tap "Start Listenin
 ## Conversation Mode's LLM
 
 Everything except the LLM step runs on-device. For the LLM turn, `services/chatService.ts` posts to
-the Switchboard API's OpenAI proxy at `https://api.switchboard.audio/openai/chat`, authenticated with
-the **same App ID and App Secret** the SDK is initialised with — `configureChat()` is called once in
+the Switchboard API's chat endpoint at `https://api.switchboard.audio/chat`, authenticated with the
+**same App ID and App Secret** the SDK is initialised with — `configureChat()` is called once in
 `App.tsx` with those values.
 
-No OpenAI key is needed here, and none is shipped in the app. The key is set on your app's config in
-the [console](https://console.switchboard.audio), and the API uses it server-side; the app only ever
-receives generated text.
+No model-provider API key is needed here, and none is shipped in the app. Chat is enabled for your
+app in the [console](https://console.switchboard.audio) and the API talks to the model provider
+server-side; the app only ever receives generated text.
 
-The proxy owns the request shape. It picks the model and output length and trims history, so the app
+The API owns the request shape. It picks the model and output length and trims history, so the app
 sends only `messages` — no `model`, no `max_tokens`. It also rate limits per app and answers `429`
 with a `Retry-After`, which `chatService` honours in preference to its own backoff.
 
-| Status | Meaning                             | Handling                                         |
-| ------ | ----------------------------------- | ------------------------------------------------ |
-| `429`  | Per-app rate limit reached          | Retried, waiting the `Retry-After` the API sends |
-| `401`  | App credentials rejected            | Not retried — fix your `.env`                    |
-| `400`  | No OpenAI key set on the app config | Not retried — set one in the console             |
+| Status | Meaning                       | Handling                                         |
+| ------ | ----------------------------- | ------------------------------------------------ |
+| `429`  | Per-app rate limit reached    | Retried, waiting the `Retry-After` the API sends |
+| `401`  | App credentials rejected      | Not retried — fix your `.env`                    |
+| `400`  | Chat not enabled for this app | Not retried — enable it in the console           |
 
 Two things to know:
 

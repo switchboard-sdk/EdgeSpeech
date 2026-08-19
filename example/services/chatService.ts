@@ -1,12 +1,12 @@
 /**
  * Chat backend for the example app's Conversation Mode.
  *
- * Calls the Switchboard API's OpenAI proxy, authenticated with the same App ID and
- * App Secret the SDK is initialised with. The OpenAI key lives on the app's config in
- * the console and never reaches the device — this app only ever sees generated text.
+ * Calls the Switchboard API's chat endpoint, authenticated with the same App ID and
+ * App Secret the SDK is initialised with. No model-provider credential lives in this
+ * app — the API holds it, and this app only ever sees generated text.
  *
- * The proxy clamps the model, output length and history server-side, and rate limits
- * per app. It returns `Retry-After` on 429, which is honoured below.
+ * The API chooses the model and clamps output length and history, and rate limits per
+ * app. It returns `Retry-After` on 429, which is honoured below.
  */
 
 const DEFAULT_API_BASE_URL = 'https://api.switchboard.audio'
@@ -20,9 +20,9 @@ const FALLBACK_REPLY = 'Sorry, I could not generate a response.'
 const RETRYABLE_STATUSES = new Set([408, 425, 429, 500, 502, 503, 504])
 
 const DEFAULT_TUNING = {
-  /** Trailing history messages to send; the proxy trims further if needed. */
+  /** Trailing history messages to send; the API trims further if needed. */
   historyMessages: 8,
-  /** Light spacing so a fast conversation can't trip the proxy's limiter. */
+  /** Light spacing so a fast conversation can't trip the rate limit. */
   minRequestIntervalMs: 1_000,
   requestTimeoutMs: 20_000,
   maxAttempts: 3,
@@ -56,7 +56,7 @@ interface RequestMessage {
   content: string
 }
 
-interface ProxyResponse {
+interface ChatResponse {
   success?: boolean
   message?: string
   data?: { text?: string; model?: string }
@@ -87,7 +87,7 @@ export function configureChat(next: ChatCredentials): void {
   credentials = next
 }
 
-/** Serialises requests so a burst of turns can't trip the proxy's per-app limiter. */
+/** Serialises requests so a burst of turns can't trip the per-app rate limit. */
 let queue: Promise<unknown> = Promise.resolve()
 let lastRequestAt = 0
 
@@ -179,7 +179,7 @@ async function postChat(
 
   let response: Response
   try {
-    response = await doFetch(`${baseUrl}/openai/chat`, {
+    response = await doFetch(`${baseUrl}/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -206,16 +206,16 @@ async function postChat(
     })
   }
 
-  let body: ProxyResponse
+  let body: ChatResponse
   try {
-    body = (await response.json()) as ProxyResponse
+    body = (await response.json()) as ChatResponse
   } catch (error) {
     throw new ChatError(`Malformed response: ${(error as Error).message}`, { retryable: false })
   }
 
   const text = body.data?.text?.trim()
   if (!text) {
-    console.warn('[Chat] proxy returned no text; using fallback')
+    console.warn('[Chat] chat endpoint returned no text; using fallback')
     return FALLBACK_REPLY
   }
   return text
@@ -228,16 +228,16 @@ async function describeFailure(response: Response): Promise<string> {
     case 401:
       return `Switchboard rejected the app credentials.${detail}`
     case 429:
-      return `Rate limited by the chat proxy.${detail}`
+      return `Rate limited by the chat endpoint.${detail}`
     default:
       return `Chat API error: ${response.status}${detail}`
   }
 }
 
-/** The proxy always answers with { success, message } — surface its message. */
+/** The API always answers with { success, message } — surface its message. */
 async function readErrorDetail(response: Response): Promise<string> {
   try {
-    const body = (await response.json()) as ProxyResponse & { error?: { message?: string } }
+    const body = (await response.json()) as ChatResponse & { error?: { message?: string } }
     const message = body.message ?? body.error?.message
     return message ? ` (${message})` : ''
   } catch {
