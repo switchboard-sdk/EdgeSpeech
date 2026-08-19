@@ -21,7 +21,11 @@ const SWITCHBOARD_APP_ID = process.env.EXPO_PUBLIC_SWITCHBOARD_APP_ID ?? ''
 const SWITCHBOARD_APP_SECRET = process.env.EXPO_PUBLIC_SWITCHBOARD_APP_SECRET ?? ''
 
 // Conversation Mode reaches the LLM through the Switchboard API using these same credentials.
-configureChat({ appId: SWITCHBOARD_APP_ID, appSecret: SWITCHBOARD_APP_SECRET })
+configureChat({
+  appId: SWITCHBOARD_APP_ID,
+  appSecret: SWITCHBOARD_APP_SECRET,
+  apiBaseUrl: process.env.EXPO_PUBLIC_SWITCHBOARD_API_URL,
+})
 
 function VoiceApp(): React.JSX.Element {
   const {

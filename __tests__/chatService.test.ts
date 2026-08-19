@@ -107,6 +107,24 @@ describe('chatService', () => {
     expect(body.max_tokens).toBeUndefined()
   })
 
+  it('posts to production by default and honours an API base URL override', async () => {
+    const urls: string[] = []
+    const fetchImpl: typeof fetch = async (url) => {
+      urls.push(String(url))
+      return reply('ok')
+    }
+
+    await sendToChat('hi', [], { ...FAST, fetchImpl })
+
+    resetChatState()
+    // Trailing slash included on purpose — it must not produce a double slash.
+    configureChat({ ...CREDS, apiBaseUrl: 'https://api.example.test/' })
+    await sendToChat('hi', [], { ...FAST, fetchImpl })
+
+    expect(urls[0]).toBe('https://api.switchboard.audio/openai/chat')
+    expect(urls[1]).toBe('https://api.example.test/openai/chat')
+  })
+
   it('does not retry rejected credentials', async () => {
     const fetchImpl = jest.fn(async () =>
       failure(401, { success: false, message: 'Invalid app credentials.' })

@@ -14,12 +14,18 @@ const env =
 
 const appId = env.SWITCHBOARD_APP_ID
 const appSecret = env.SWITCHBOARD_APP_SECRET
+// Optional API host override; defaults to production.
+const apiBaseUrl = env.SWITCHBOARD_API_URL
 
 const describeIfConfigured = appId && appSecret ? describe : describe.skip
 
 describeIfConfigured('chatService (integration)', () => {
   beforeAll(() => {
-    configureChat({ appId: appId as string, appSecret: appSecret as string })
+    configureChat({
+      appId: appId as string,
+      appSecret: appSecret as string,
+      apiBaseUrl,
+    })
   })
 
   it('returns a non-empty string response', async () => {

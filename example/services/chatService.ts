@@ -9,7 +9,7 @@
  * per app. It returns `Retry-After` on 429, which is honoured below.
  */
 
-const CHAT_URL = 'https://api.switchboard.audio/openai/chat'
+const DEFAULT_API_BASE_URL = 'https://api.switchboard.audio'
 
 const SYSTEM_PROMPT =
   'You are a helpful, friendly voice assistant. Keep responses concise (1-2 sentences) since they will be spoken aloud.'
@@ -42,6 +42,8 @@ export interface ConversationMessage {
 export interface ChatCredentials {
   appId: string
   appSecret: string
+  /** Override the API host. Defaults to the production API. */
+  apiBaseUrl?: string
 }
 
 export interface SendToChatOptions extends Partial<ChatTuning> {
@@ -173,9 +175,11 @@ async function postChat(
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), tuning.requestTimeoutMs)
 
+  const baseUrl = (creds.apiBaseUrl ?? DEFAULT_API_BASE_URL).replace(/\/+$/, '')
+
   let response: Response
   try {
-    response = await doFetch(CHAT_URL, {
+    response = await doFetch(`${baseUrl}/openai/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
