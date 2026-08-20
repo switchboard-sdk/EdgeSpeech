@@ -3,17 +3,30 @@ import { type VoiceState } from './SwitchboardVoiceModule'
 import { useEdgeSpeechContext } from './EdgeSpeechProvider'
 
 export function useEdgeSpeech() {
-  const { addListener, listen, stopListening, speak, stopSpeaking, requestMicrophonePermission } =
-    useEdgeSpeechContext()
+  const {
+    addListener,
+    getState,
+    listen,
+    stopListening,
+    speak,
+    stopSpeaking,
+    requestMicrophonePermission,
+  } = useEdgeSpeechContext()
 
   const [transcript, setTranscript] = useState('')
   const transcriptCompleteCallback = useRef<((text: string) => void) | null>(null)
-  const [voiceState, setVoiceState] = useState<VoiceState>('idle')
+  // Seeded from the engine, not hardcoded: a component mounting during Android's
+  // model staging must read 'initializing', not the 'idle' a fixed seed would give.
+  const [voiceState, setVoiceState] = useState<VoiceState>(getState)
   const [error, setError] = useState<string | null>(null)
   const [hasMicrophonePermission, setHasMicrophonePermission] = useState<boolean | null>(null)
   const interruptedCallback = useRef<(() => void) | null>(null)
 
   useEffect(() => {
+    // Close the render→effect gap: an Android staging finish landing in it would
+    // otherwise leave voiceState stuck at the 'initializing' seeded above.
+    setVoiceState(getState())
+
     const transcriptSub = addListener('onTranscript', ({ text, isFinal }) => {
       setTranscript(text)
 
@@ -41,7 +54,7 @@ export function useEdgeSpeech() {
       interruptedSub.remove()
       errorSub.remove()
     }
-  }, [addListener])
+  }, [addListener, getState])
 
   const onTranscriptComplete = useCallback((cb: (text: string) => void) => {
     transcriptCompleteCallback.current = cb

@@ -26,6 +26,7 @@ function VoiceApp(): React.JSX.Element {
     onTranscriptComplete,
     onInterrupted,
     voiceState,
+    error,
     listen,
     stopListening,
     speak,
@@ -81,7 +82,7 @@ function VoiceApp(): React.JSX.Element {
 
   // Resume listening after TTS completes in conversation mode
   useEffect(() => {
-    if (prevVoiceStateRef.current === 'speaking' && voiceState === 'idle') {
+    if (prevVoiceStateRef.current === 'speaking' && voiceState === 'ready') {
       if (conversationMode) {
         listen()
       }
@@ -118,9 +119,29 @@ function VoiceApp(): React.JSX.Element {
     setConversationHistory([])
   }
 
+  // Not operable until init finishes: 'initializing' is staging in progress, 'idle' means
+  // the SDK is not up at all — not started yet, or init failed, which `error` tells apart.
+  const isStarting = voiceState === 'idle' || voiceState === 'initializing'
+
+  const listenButtonLabel = () => {
+    switch (voiceState) {
+      case 'initializing':
+        return 'Preparing…'
+      case 'idle':
+        return 'Not ready'
+      case 'listening':
+        return 'Stop Listening'
+      default:
+        return 'Start Listening'
+    }
+  }
+
   const getStateColor = () => {
     switch (voiceState) {
       case 'idle':
+      case 'initializing':
+        return '#9E9E9E'
+      case 'ready':
         return '#666'
       case 'listening':
         return '#4CAF50'
@@ -144,6 +165,14 @@ function VoiceApp(): React.JSX.Element {
           <View style={[styles.statusDot, { backgroundColor: getStateColor() }]} />
           <Text style={styles.statusText}>Status: {voiceState}</Text>
         </View>
+
+        {/* A failed init leaves voiceState at 'idle' with the reason only in `error`. */}
+        {error ? (
+          <View style={styles.errorBox}>
+            <Text style={styles.errorLabel}>Error</Text>
+            <Text style={styles.errorText}>{error}</Text>
+          </View>
+        ) : null}
 
         {/* Conversation Mode Toggle */}
         <View style={styles.section}>
@@ -202,11 +231,14 @@ function VoiceApp(): React.JSX.Element {
           <Text style={styles.sectionTitle}>Voice Input</Text>
           <View style={styles.buttonRow}>
             <TouchableOpacity
-              style={[styles.button, voiceState === 'listening' && styles.buttonActive]}
+              style={[
+                styles.button,
+                voiceState === 'listening' && styles.buttonActive,
+                isStarting && styles.buttonDisabled,
+              ]}
+              disabled={isStarting}
               onPress={voiceState === 'listening' ? handleStopListening : handleStartListening}>
-              <Text style={styles.buttonText}>
-                {voiceState === 'listening' ? 'Stop Listening' : 'Start Listening'}
-              </Text>
+              <Text style={styles.buttonText}>{listenButtonLabel()}</Text>
             </TouchableOpacity>
           </View>
 
@@ -230,7 +262,8 @@ function VoiceApp(): React.JSX.Element {
           />
           <View style={styles.buttonRow}>
             <TouchableOpacity
-              style={[styles.button, styles.buttonPrimary]}
+              style={[styles.button, styles.buttonPrimary, isStarting && styles.buttonDisabled]}
+              disabled={isStarting}
               onPress={handleStartSpeaking}>
               <Text style={styles.buttonText}>Speak</Text>
             </TouchableOpacity>
@@ -315,6 +348,25 @@ const styles = StyleSheet.create({
   },
   buttonDanger: {
     backgroundColor: '#d32f2f',
+  },
+  buttonDisabled: {
+    backgroundColor: '#bdbdbd',
+  },
+  errorBox: {
+    backgroundColor: '#fdecea',
+    borderColor: '#d32f2f',
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 20,
+  },
+  errorLabel: {
+    fontWeight: 'bold',
+    color: '#d32f2f',
+    marginBottom: 4,
+  },
+  errorText: {
+    color: '#5f2120',
   },
   buttonText: {
     color: '#fff',

@@ -37,6 +37,8 @@ import type {
  */
 class EdgeSpeechAPI {
   private _isConfigured = false
+  // Mirrors the engine, which starts 'idle' — the SDK is not up until configure()
+  // has kicked off initialize() and that has reached 'ready'.
   private _currentState: VoiceState = 'idle'
   private _onTranscript: TranscriptCallback | null = null
   private _onStateChange: StateChangeCallback | null = null
@@ -83,26 +85,19 @@ class EdgeSpeechAPI {
       throw new Error('vadSensitivity must be between 0.0 and 1.0')
     }
 
-    if (config.sttModel !== undefined && config.sttModel.trim() === '') {
-      throw new Error('sttModel cannot be an empty string')
-    }
-
-    if (config.ttsVoice !== undefined && config.ttsVoice.trim() === '') {
-      throw new Error('ttsVoice cannot be an empty string')
-    }
 
     // Apply defaults
     const finalConfig = {
       appId: config.appId,
       appSecret: config.appSecret,
-      sttModel: config.sttModel || 'whisper-base-en',
-      ttsVoice: config.ttsVoice || 'silero-en-us',
       vadSensitivity: config.vadSensitivity ?? 0.5,
     }
 
-    // Initialize and configure native module
-    SwitchboardVoiceModule.initialize(finalConfig.appId, finalConfig.appSecret)
+    // Configure first: the graph initialize() builds is shaped by this config.
     SwitchboardVoiceModule.configure(finalConfig)
+    // Deliberately not awaited: listen()/speak() wait for the Android staging
+    // themselves, and a caller of configure() must be configured on return.
+    SwitchboardVoiceModule.initialize(finalConfig.appId, finalConfig.appSecret)
 
     this._isConfigured = true
   }

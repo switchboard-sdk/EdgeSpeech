@@ -22,3 +22,7 @@ PROGRESS.md
 
 # Claude Code internal memory
 memory/
+
+# Downloaded on-device models (large; fetched by the Gradle downloadModels task)
+**/assets/models/
+ggml-*.bin

@@ -1,0 +1,116 @@
+// React Native Android library module for EdgeSpeech.
+//
+// The shared C++ TurboModule (../cpp) is compiled and registered in the
+// *consuming app's* native build via RN's C++ autolinking — see
+// react-native.config.js (android cxx* keys) and android/CMakeLists.txt. This
+// module provides codegen for the spec and makes the Switchboard AARs (and
+// their Prefab packages) available to the app via `api`.
+apply plugin: "com.android.library"
+apply plugin: "org.jetbrains.kotlin.android"
+apply plugin: "com.facebook.react"
+
+def safeExtGet(prop, fallback) {
+    rootProject.ext.has(prop) ? rootProject.ext.get(prop) : fallback
+}
+
+// Must match the iOS framework version vendored via edgespeech.podspec.
+def switchboardSdkVersion = "3.2.3"
+
+// The app declares the Maven repo and Prefab itself (bare RN via the README's
+// Android setup snippet, Expo via app.plugin.js). We don't inject them from here:
+// Gradle's Project Isolation forbids configuring another project, and the
+// injection landed too late under Expo's configuration ordering anyway.
+
+react {
+    // Codegen reads the TurboModule spec from the package's TS sources and
+    // generates RNEdgeSpeechSpec (matches package.json codegenConfig.name).
+    jsRootDir = file("../src/")
+    libraryName = "RNEdgeSpeechSpec"
+    codegenJavaPackageName = "com.synervoz.edgespeech"
+}
+
+android {
+    namespace "com.synervoz.edgespeech"
+    compileSdk safeExtGet("compileSdkVersion", 35)
+
+    defaultConfig {
+        minSdkVersion safeExtGet("minSdkVersion", 24)
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+}
+
+repositories {
+    mavenCentral()
+    google()
+    // Switchboard SDK + extensions.
+    maven { url "https://s3.amazonaws.com/synervoz-android-maven-repository" }
+}
+
+dependencies {
+    implementation "com.facebook.react:react-android"
+
+    // `api` so the Switchboard AARs (and their Prefab packages) are visible to
+    // the consuming app's native build, which is where our cpp is compiled.
+    api "com.synervoz.switchboard:switchboardsdk:${switchboardSdkVersion}"
+    api "com.synervoz.switchboard.extensions:onnx:${switchboardSdkVersion}"
+    api "com.synervoz.switchboard.extensions:silerovad:${switchboardSdkVersion}"
+    api "com.synervoz.switchboard.extensions:whisper:${switchboardSdkVersion}"
+    api "com.synervoz.switchboard.extensions:sherpa:${switchboardSdkVersion}"
+}
+
+// On-device models. The AARs bundle none (the iOS frameworks bake the same models
+// in), so they're fetched into this module's own assets and Android's asset merge
+// folds them into the consuming app's APK — no app-side setup, Expo or bare RN.
+//
+// One STT model and one TTS voice, matching what SwitchboardWhisper.framework and
+// SwitchboardSherpa.framework give iOS by default, so both platforms speak and hear
+// the same. Keep in step with ANDROID_WHISPER_MODEL_ASSET / ANDROID_TTS_VOICE in
+// src/VoiceEngine.ts.
+def modelBaseUrl = "https://switchboard-sdk-public.s3.amazonaws.com/assets/models"
+def modelPaths = [
+    "whisper/ggml-base.en.bin",
+    "sherpa/tts/en_GB.zip",
+]
+def modelsRoot = file("src/main/assets/models")
+
+def downloadModels = tasks.register("downloadModels") {
+    description = "Downloads the on-device STT/TTS models into the library's assets."
+    group = "build setup"
+
+    inputs.property("baseUrl", modelBaseUrl)
+    inputs.property("paths", modelPaths)
+    outputs.files(modelPaths.collect { new File(modelsRoot, it) })
+
+    doLast {
+        modelPaths.each { rel ->
+            def dest = new File(modelsRoot, rel)
+            if (dest.exists()) {
+                return
+            }
+            dest.parentFile.mkdirs()
+            // Download to a sidecar first so an interrupted run can't leave a
+            // truncated file that later looks complete.
+            def part = new File("${dest}.part")
+            logger.lifecycle("EdgeSpeech: downloading ${rel}")
+            new URL("${modelBaseUrl}/${rel}").withInputStream { input ->
+                part.withOutputStream { output -> output << input }
+            }
+            if (!part.renameTo(dest)) {
+                throw new GradleException("EdgeSpeech: could not move ${part} into place")
+            }
+        }
+    }
+}
+
+// The models have to be on disk before anything packages assets, and preBuild is the one hook that
+// always runs. Wiring keyed on AGP asset-task names is finer-grained but fails silently when a name
+// stops matching: the build stays green and the APK ships without models.
+tasks.named("preBuild") { dependsOn(downloadModels) }

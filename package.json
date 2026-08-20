@@ -9,18 +9,24 @@
       "require": "./dist/index.js",
       "types": "./dist/index.d.ts"
     },
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./app.plugin.js": "./app.plugin.js"
   },
   "files": [
     "src",
     "dist",
     "ios",
+    "android",
     "cpp",
     "edgespeech.podspec",
     "react-native.config.js",
-    "scripts/postinstall.js",
+    "app.plugin.js",
+    "plugin",
+    "scripts/download-ios-frameworks.sh",
     "README.md",
     "!ios/Frameworks",
+    "!android/src/main/assets/models",
+    "!android/build",
     "!**/__tests__",
     "!**/__mocks__",
     "!**/*.test.*",
@@ -28,7 +34,6 @@
   ],
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.build.json",
-    "postinstall": "node scripts/postinstall.js",
     "test": "jest --verbose",
     "test:integration": "jest --config jest.integration.config.js",
     "format": "prettier --write .",
@@ -60,10 +65,17 @@
     "url": "git@github.com:switchboard-sdk/EdgeSpeech.git"
   },
   "peerDependencies": {
+    "@expo/config-plugins": ">=54.0.0",
     "react": ">=18.0.0",
     "react-native": ">=0.81.0"
   },
+  "peerDependenciesMeta": {
+    "@expo/config-plugins": {
+      "optional": true
+    }
+  },
   "devDependencies": {
+    "@expo/config-plugins": "^54.0.0",
     "@react-native/babel-preset": "^0.76.0",
     "@react-native/eslint-config": "^0.85.2",
     "@react-native/metro-config": "^0.76.0",
@@ -83,10 +95,6 @@
   },
   "engines": {
     "node": ">=22"
-  },
-  "dependencies": {
-    "@aws-sdk/client-s3": "^3.1062.0",
-    "@clack/prompts": "^1.4.0"
   },
   "codegenConfig": {
     "name": "RNEdgeSpeechSpec",

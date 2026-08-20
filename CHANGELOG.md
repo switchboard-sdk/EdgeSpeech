@@ -32,12 +32,42 @@ is a thin delegate over the Switchboard SDK's `SwitchboardJSONRPC`.
 
 ## [Unreleased]
 
+### Changed — BREAKING
+
+- `VoiceState` now separates "the SDK is not up" from "the SDK is up and waiting":
+  `'idle' | 'initializing' | 'ready' | 'listening' | 'processing' | 'speaking'`.
+  **`'idle'` has changed meaning** — it no longer means "ready and waiting", it means the SDK is
+  not initialized (either `initialize()` has not run, or it failed). The initialized-and-waiting
+  state is now `'ready'`. Code that gates on `voiceState === 'idle'` must move to `'ready'`;
+  because both are valid `VoiceState` values, TypeScript will **not** flag the change for you.
+- A failed `initialize()` now reports `'idle'` instead of looking indistinguishable from a ready
+  engine; the cause still arrives via `onError` / the hook's `error`.
+- `stopListening()` and a `stopSpeaking()` with no listening session now emit `'ready'`
+  (previously `'idle'`).
+- **One STT model and one TTS voice on both platforms.** Whisper `base.en` and the `en_GB` Piper
+  voice — the same ones the iOS frameworks bake in — are now fixed, so the two platforms behave
+  identically.
+
 ### Added
 
+- `'initializing'` state, covering SDK startup and the Android STT/TTS model staging. A
+  `listen()`/`speak()` issued during it waits rather than failing.
+- `useEdgeSpeech().voiceState` is seeded from the engine's current state, so a component that
+  mounts mid-initialization reads `'initializing'` rather than a stale value.
 - Initial project scaffolding
 - TurboModule architecture for React Native bridge
 - iOS native module setup
 - TypeScript types and configuration
+
+### Removed
+
+- `useEdgeSpeech().isInitializing` — replaced by `voiceState === 'initializing'`.
+- `sttModel` config option (`EdgeSpeechProvider` prop, `EdgeSpeech.configure()`, `VoiceConfig`).
+  It only ever did anything on Android; iOS ships `base.en` alone inside
+  `SwitchboardWhisper.framework`, with no CoreML encoder for any other model.
+- `ttsVoice` config option. Same asymmetry: `Sherpa.TTS` hardcodes English in its constructor, so
+  on iOS the value was silently ignored while on Android a typo threw `TTS_VOICE_UNAVAILABLE`.
+- `edgespeechModels` Gradle property — the model set is fixed, so there is nothing to override.
 
 ## [0.1.0] - TBD
 

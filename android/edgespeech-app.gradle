@@ -1,0 +1,27 @@
+// App-side Gradle wiring for EdgeSpeech. Expo apps get this from app.plugin.js during prebuild;
+// bare React Native apps apply it by hand (see the README).
+//
+// EdgeSpeech is a C++ TurboModule, so RN's autolinking has the app's CMake configure
+// add_subdirectory() the codegen JNI dir our project generates. RN orders that only through the
+// library's own preBuild, and the AGP chain carrying it to the app is absent under
+// --configure-on-demand — which `expo run:android` always passes and gradle.properties can't
+// override. With parallel execution the app then reaches CMake before the spec exists, failing on a
+// missing codegen/jni dir or `'RNEdgeSpeechSpecJSI.h' file not found`. Declaring the dependency
+// holds under any execution mode.
+
+// RN derives this project name from the package name: '@synervoz/edgespeech' → 'synervoz_edgespeech'.
+def edgespeechProject = rootProject.findProject(':synervoz_edgespeech')
+
+if (edgespeechProject == null) {
+    logger.warn(
+        'EdgeSpeech: :synervoz_edgespeech not found — codegen ordering skipped. If the Android ' +
+        'build fails on a missing codegen/jni dir, run ./gradlew projects and update the path in ' +
+        'edgespeech-app.gradle.'
+    )
+} else {
+    // The per-ABI tasks are the ones that run: configureCMakeDebug[arm64-v8a], etc.
+    // A task path string stays lazy, so the library is still configured on demand.
+    tasks.matching { it.name.startsWith('configureCMake') }.configureEach {
+        dependsOn("${edgespeechProject.path}:generateCodegenArtifactsFromSchema")
+    }
+}
