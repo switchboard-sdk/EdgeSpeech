@@ -20,28 +20,18 @@ import { makeError } from './errors'
 /** The Oboe input preset that, with the communication route, turns on the hardware AEC. */
 export const ANDROID_INPUT_PRESET = 7 // oboe InputPreset.VoiceCommunication
 
-// The one Whisper model, as an asset path. iOS reads the identical model from inside
-// SwitchboardWhisper.framework, which is why there is nothing to select: the framework
-// bundles base.en alone (plus its CoreML encoder), so a second model would be available
-// on one platform only. Kept in step with android/build.gradle's model list.
-const WHISPER_MODEL_ASSET = 'models/whisper/ggml-base.en.bin'
-
-// The one Sherpa TTS voice: bundled zip, plus the paths inside it. Extracted to filesDir
-// once. iOS needs no equivalent — Sherpa.TTS hardcodes "en" in its constructor and loads
-// this same voice out of SwitchboardSherpa.framework by itself.
-const TTS_VOICE = {
-  zipAsset: 'models/sherpa/tts/en_GB.zip',
-  extractDir: 'sherpa/tts/en_GB',
-  voiceDir: 'en_GB/vits-piper-en_GB-southern_english_female-low',
-  modelFile: 'en_GB-southern_english_female-low.with_runtime_opt.ort',
+/** What Kotlin's prepareAssets() resolves: filesDir paths the Switchboard nodes load by. */
+interface StagedAssets {
+  sttModelPath: string
+  /** Only present when the voice was asked for — see ensureAssets(). */
+  ttsModelPath?: string
+  ttsTokensPath?: string
+  ttsDataPath?: string
 }
 
 export class AndroidSession {
-  /** Resolved absolute path to the Whisper model (see ensureModel). */
-  private modelPath: string | null = null
-
-  /** filesDir root the TTS voice zip was extracted to (see stageTtsVoice). */
-  private ttsDir: string | null = null
+  /** Where the staged assets landed, as resolved by Kotlin. Null until first staged. */
+  private assets: StagedAssets | null = null
 
   /**
    * Bumped by every cancelPendingStarts(). A start captures it before its first await and
@@ -90,8 +80,7 @@ export class AndroidSession {
       }
     }
     try {
-      await this.ensureModel()
-      await this.stageTtsVoice()
+      await this.ensureAssets(true)
     } catch {
       // Retried on the next listen()/speak(), which is where it reaches the caller.
     }
@@ -109,10 +98,7 @@ export class AndroidSession {
     const generation = this.stopGeneration
     await awaitInit()
     await this.ensureMicPermission()
-    await this.ensureModel()
-    if (stageTtsVoice) {
-      await this.stageTtsVoice()
-    }
+    await this.ensureAssets(stageTtsVoice)
     await this.enableRoute()
 
     if (this.stopGeneration === generation) {
@@ -124,20 +110,16 @@ export class AndroidSession {
 
   /** Where the Whisper model was staged, for the engine's sttNode loadModel. */
   get sttModelPath(): string | null {
-    return this.modelPath
+    return this.assets?.sttModelPath ?? null
   }
 
   /** Where the TTS voice was staged, as the three paths Sherpa's loadModel wants. */
   get ttsVoicePaths(): { modelPath: string; tokensPath: string; dataPath: string } | null {
-    if (!this.ttsDir) {
+    const { ttsModelPath, ttsTokensPath, ttsDataPath } = this.assets ?? {}
+    if (!ttsModelPath || !ttsTokensPath || !ttsDataPath) {
       return null
     }
-    const dir = `${this.ttsDir}/${TTS_VOICE.voiceDir}`
-    return {
-      modelPath: `${dir}/${TTS_VOICE.modelFile}`,
-      tokensPath: `${dir}/tokens.txt`,
-      dataPath: `${dir}/espeak-ng-data`,
-    }
+    return { modelPath: ttsModelPath, tokensPath: ttsTokensPath, dataPath: ttsDataPath }
   }
 
   /** Cancel any start still in its async prep, so the mic never opens after a stop. */
@@ -161,60 +143,42 @@ export class AndroidSession {
     )
   }
 
-  /** Copy the Whisper model asset to filesDir (once) and cache its path. */
-  private async ensureModel(): Promise<void> {
-    if (this.modelPath) {
+  /**
+   * Stage the models, once. Kotlin owns where they live inside the APK and returns the
+   * filesDir paths; this only caches them and maps its error codes onto ours.
+   *
+   * `includeTts` extracts the ~82 MB voice too. A listen()-only retry doesn't ask for it,
+   * so a session that never speaks never pays for it.
+   */
+  private async ensureAssets(includeTts: boolean): Promise<void> {
+    if (this.assets && (!includeTts || this.assets.ttsModelPath)) {
       return
     }
     const models = NativeModules.EdgeSpeechModels
-    if (!models?.prepareModel) {
+    if (!models?.prepareAssets) {
       throw makeError(
         'MODEL_UNAVAILABLE',
-        'EdgeSpeechModels native module is unavailable — cannot resolve the Whisper model path on Android.'
+        'EdgeSpeechModels native module is unavailable — cannot stage the models on Android.'
       )
     }
     try {
-      this.modelPath = await models.prepareModel(WHISPER_MODEL_ASSET)
+      this.assets = await models.prepareAssets(includeTts)
     } catch (e) {
-      // The asset never made it into the APK — a build that stripped or never ran the
-      // model download. Separated from a genuine copy failure (no space, unreadable)
-      // because the fix is a build change, not a runtime one.
-      if ((e as { code?: string })?.code === 'model_asset_missing') {
-        throw makeError(
-          'MODEL_UNAVAILABLE',
-          `The Whisper model is missing from this build (expected asset ` +
-            `'${WHISPER_MODEL_ASSET}'). Rebuild so Gradle's downloadModels task runs.`
-        )
+      const message = (e as Error)?.message ?? String(e)
+      switch ((e as { code?: string })?.code) {
+        // An asset that never made it into the APK: a build that stripped or never ran
+        // the model download. Separated from a genuine copy failure (no space,
+        // unreadable) because the fix is a build change, not a runtime one.
+        case 'model_asset_missing':
+          throw makeError(
+            'MODEL_UNAVAILABLE',
+            `${message} Rebuild so Gradle's downloadModels task runs.`
+          )
+        case 'model_archive_error':
+          throw makeError('TTS_MODEL_LOAD_FAILED', message)
+        default:
+          throw makeError('MODEL_LOAD_FAILED', message)
       }
-      throw makeError(
-        'MODEL_LOAD_FAILED',
-        `Failed to prepare Whisper model '${WHISPER_MODEL_ASSET}': ${(e as Error)?.message ?? String(e)}`
-      )
-    }
-  }
-
-  /**
-   * Extract the TTS voice to filesDir (once) and cache its root. Handing it to the
-   * ttsNode is a separate, synchronous step — loadTtsVoice().
-   */
-  private async stageTtsVoice(): Promise<void> {
-    if (this.ttsDir) {
-      return
-    }
-    const models = NativeModules.EdgeSpeechModels
-    if (!models?.prepareArchive) {
-      throw makeError(
-        'TTS_VOICE_UNAVAILABLE',
-        'EdgeSpeechModels native module is unavailable — cannot resolve the TTS voice path on Android.'
-      )
-    }
-    try {
-      this.ttsDir = await models.prepareArchive(TTS_VOICE.zipAsset, TTS_VOICE.extractDir)
-    } catch (e) {
-      throw makeError(
-        'TTS_MODEL_LOAD_FAILED',
-        `Failed to extract TTS voice '${TTS_VOICE.zipAsset}': ${(e as Error)?.message ?? String(e)}`
-      )
     }
   }
 

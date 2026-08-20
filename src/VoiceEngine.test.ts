@@ -300,10 +300,19 @@ describe('VoiceEngine Android platform branches', () => {
   const originalOS = RN.Platform.OS
   const FILES_DIR = '/data/user/0/app/files'
   const ANDROID_MODEL_PATH = `${FILES_DIR}/models/whisper/ggml-base.en.bin`
-  // Each voice gets its own extraction root, so the resolved path depends on destSubdir.
-  const ttsRoot = (voice: string) => `${FILES_DIR}/sherpa/tts/${voice}`
-  let prepareModel: jest.Mock
-  let prepareArchive: jest.Mock
+  // The voice's filesDir layout is Kotlin's business now; JS only passes these through.
+  const TTS_DIR = `${FILES_DIR}/sherpa/tts/en_GB/en_GB-vits-piper-low`
+  const TTS_PATHS = {
+    ttsModelPath: `${TTS_DIR}/en_GB-southern_english_female-low.with_runtime_opt.ort`,
+    ttsTokensPath: `${TTS_DIR}/tokens.txt`,
+    ttsDataPath: `${TTS_DIR}/espeak-ng-data`,
+  }
+  /** Kotlin stages the voice only when asked, so the tts paths are conditional. */
+  const stagedAssets = (includeTts: boolean) => ({
+    sttModelPath: ANDROID_MODEL_PATH,
+    ...(includeTts ? TTS_PATHS : {}),
+  })
+  let prepareAssets: jest.Mock
   let initializeSdk: jest.Mock
   let checkPermission: jest.SpyInstance
   let enableCommunicationRoute: jest.Mock
@@ -328,12 +337,9 @@ describe('VoiceEngine Android platform branches', () => {
     )
 
   beforeEach(() => {
-    prepareModel = jest.fn().mockResolvedValue(ANDROID_MODEL_PATH)
-    prepareArchive = jest.fn((_zip: string, dest: string) =>
-      Promise.resolve(`${FILES_DIR}/${dest}`)
-    )
+    prepareAssets = jest.fn((includeTts: boolean) => Promise.resolve(stagedAssets(includeTts)))
     initializeSdk = jest.fn().mockResolvedValue(null)
-    RN.NativeModules.EdgeSpeechModels = { prepareModel, prepareArchive, initializeSdk }
+    RN.NativeModules.EdgeSpeechModels = { prepareAssets, initializeSdk }
     startSentBeforeRoute = null
     enableCommunicationRoute = jest.fn(async () => {
       startSentBeforeRoute = findAction('start') !== undefined
@@ -358,10 +364,10 @@ describe('VoiceEngine Android platform branches', () => {
     RN.Platform.OS = 'android'
     // Park the staging so the window between the Kotlin init and a ready model — the
     // one 'initializing' exists to describe — can be observed.
-    let finishStaging: (path: string) => void = () => {}
-    prepareModel.mockReturnValueOnce(
-      new Promise<string>((resolve) => {
-        finishStaging = resolve
+    let finishStaging: () => void = () => {}
+    prepareAssets.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishStaging = () => resolve(stagedAssets(true))
       })
     )
     const states: string[] = []
@@ -372,7 +378,7 @@ describe('VoiceEngine Android platform branches', () => {
     expect(voiceEngine.currentState).toBe('initializing')
     expect(states).toEqual(['initializing'])
 
-    finishStaging(ANDROID_MODEL_PATH)
+    finishStaging()
     await init
 
     expect(states).toEqual(['initializing', 'ready'])
@@ -381,10 +387,10 @@ describe('VoiceEngine Android platform branches', () => {
 
   it("defers a listen() issued during 'initializing' rather than rejecting it", async () => {
     RN.Platform.OS = 'android'
-    let finishStaging: (path: string) => void = () => {}
-    prepareModel.mockReturnValueOnce(
-      new Promise<string>((resolve) => {
-        finishStaging = resolve
+    let finishStaging: () => void = () => {}
+    prepareAssets.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishStaging = () => resolve(stagedAssets(true))
       })
     )
     const states: string[] = []
@@ -397,7 +403,7 @@ describe('VoiceEngine Android platform branches', () => {
     expect(findAction('createEngine')).toBeUndefined()
     expect(states).toEqual(['initializing'])
 
-    finishStaging(ANDROID_MODEL_PATH)
+    finishStaging()
     await listening
 
     // 'listening' comes after the settle, never clobbered by it — listen() awaits the
@@ -520,7 +526,7 @@ describe('VoiceEngine Android platform branches', () => {
     voiceEngine.initialize('app-id', 'app-secret')
     await voiceEngine.listen()
 
-    expect(prepareModel).toHaveBeenCalledWith('models/whisper/ggml-base.en.bin')
+    expect(prepareAssets).toHaveBeenCalled()
     const load = findAction('loadModel')!
     expect(load.params.objectURI).toBe('sttNode')
     expect(load.params.params.modelPath).toBe(ANDROID_MODEL_PATH)
@@ -542,8 +548,7 @@ describe('VoiceEngine Android platform branches', () => {
     await voiceEngine.speak('again')
 
     expect(countAction('loadModel')).toBe(loadsBefore)
-    expect(prepareModel).toHaveBeenCalledTimes(1)
-    expect(prepareArchive).toHaveBeenCalledTimes(1)
+    expect(prepareAssets).toHaveBeenCalledTimes(1)
   })
 
   it('discards the engine when Whisper loadModel fails, so a retry reloads it', async () => {
@@ -651,17 +656,20 @@ describe('VoiceEngine Android platform branches', () => {
   it('reports a build whose Whisper asset never got downloaded', async () => {
     RN.Platform.OS = 'android'
     // Gradle's downloadModels task puts the model in the library's assets; a build that
-    // skipped it has none. The fix is a build change — say so, and say which asset.
-    const missing = Object.assign(new Error('Model asset is not bundled in this build.'), {
-      code: 'model_asset_missing',
-    })
-    prepareModel.mockRejectedValue(missing)
+    // skipped it has none. Kotlin names the asset (it owns the paths now); JS adds the
+    // fix, since the remedy is a build change rather than a runtime one.
+    const missing = Object.assign(
+      new Error('Model asset is not bundled in this build: models/whisper/ggml-base.en.bin'),
+      { code: 'model_asset_missing' }
+    )
+    prepareAssets.mockRejectedValue(missing)
     voiceEngine.initialize('app-id', 'app-secret')
 
     await expect(voiceEngine.listen()).rejects.toMatchObject({
       code: 'MODEL_UNAVAILABLE',
       message: expect.stringContaining('models/whisper/ggml-base.en.bin'),
     })
+    await expect(voiceEngine.listen()).rejects.toThrow(/downloadModels/)
     expect(findAction('start')).toBeUndefined()
   })
 
@@ -695,7 +703,8 @@ describe('VoiceEngine Android platform branches', () => {
     })
     expect(errors).toEqual([{ code: 'INIT_FAILED', message: 'bad credentials' }])
     expect(findAction('createEngine')).toBeUndefined()
-    expect(prepareModel).not.toHaveBeenCalled()
+    // A dead SDK stages nothing: the failure short-circuits before the assets.
+    expect(prepareAssets).not.toHaveBeenCalled()
   })
 
   it('a failed Kotlin init also blocks speak()', async () => {
@@ -738,8 +747,8 @@ describe('VoiceEngine Android platform branches', () => {
     RN.Platform.OS = 'android'
     await voiceEngine.initialize('app-id', 'app-secret')
 
-    expect(prepareModel).toHaveBeenCalledWith('models/whisper/ggml-base.en.bin')
-    expect(prepareArchive).toHaveBeenCalledWith('models/sherpa/tts/en_GB.zip', 'sherpa/tts/en_GB')
+    // Asked for the voice too, so the first speak() isn't stalled by the unzip.
+    expect(prepareAssets).toHaveBeenCalledWith(true)
     // Staging only materializes the files — the engine is untouched until listen().
     expect(findAction('createEngine')).toBeUndefined()
   })
@@ -748,23 +757,22 @@ describe('VoiceEngine Android platform branches', () => {
     RN.Platform.OS = 'ios'
     await voiceEngine.initialize('app-id', 'app-secret')
 
-    expect(prepareModel).not.toHaveBeenCalled()
-    expect(prepareArchive).not.toHaveBeenCalled()
+    expect(prepareAssets).not.toHaveBeenCalled()
   })
 
   it('retries a staging failure from init on the next listen()', async () => {
     RN.Platform.OS = 'android'
-    prepareModel.mockRejectedValueOnce(new Error('no space left'))
+    prepareAssets.mockRejectedValueOnce(new Error('no space left'))
     await voiceEngine.initialize('app-id', 'app-secret')
 
     await voiceEngine.listen()
-    expect(prepareModel).toHaveBeenCalledTimes(2)
+    expect(prepareAssets).toHaveBeenCalledTimes(2)
     expect(findAction('createEngine')).toBeDefined()
   })
 
   it('surfaces a staging failure that persists — init itself stays quiet', async () => {
     RN.Platform.OS = 'android'
-    prepareModel.mockRejectedValue(new Error('no space left'))
+    prepareAssets.mockRejectedValue(new Error('no space left'))
     const errors: unknown[] = []
     voiceEngine.addListener('onError', (e) => errors.push(e))
     await voiceEngine.initialize('app-id', 'app-secret')
@@ -779,7 +787,7 @@ describe('VoiceEngine Android platform branches', () => {
     voiceEngine.initialize('app-id', 'app-secret')
     await voiceEngine.listen()
 
-    expect(prepareModel).not.toHaveBeenCalled()
+    expect(prepareAssets).not.toHaveBeenCalled()
     expect(findAction('loadModel')).toBeUndefined()
   })
 
@@ -788,14 +796,14 @@ describe('VoiceEngine Android platform branches', () => {
     voiceEngine.initialize('app-id', 'app-secret')
     await voiceEngine.speak('hello')
 
-    expect(prepareArchive).toHaveBeenCalledWith('models/sherpa/tts/en_GB.zip', 'sherpa/tts/en_GB')
+    // Kotlin resolved these; JS passes them through to the node untouched.
+    expect(prepareAssets).toHaveBeenCalledWith(true)
     const load = ttsLoadCall()!
-    const v = 'en_GB/vits-piper-en_GB-southern_english_female-low'
-    expect(load.params.params.modelPath).toBe(
-      `${ttsRoot('en_GB')}/${v}/en_GB-southern_english_female-low.with_runtime_opt.ort`
-    )
-    expect(load.params.params.tokensPath).toBe(`${ttsRoot('en_GB')}/${v}/tokens.txt`)
-    expect(load.params.params.dataPath).toBe(`${ttsRoot('en_GB')}/${v}/espeak-ng-data`)
+    expect(load.params.params).toEqual({
+      modelPath: TTS_PATHS.ttsModelPath,
+      tokensPath: TTS_PATHS.ttsTokensPath,
+      dataPath: TTS_PATHS.ttsDataPath,
+    })
   })
 
   it('does not load a TTS voice on iOS', async () => {
@@ -803,7 +811,7 @@ describe('VoiceEngine Android platform branches', () => {
     voiceEngine.initialize('app-id', 'app-secret')
     await voiceEngine.speak('hello')
 
-    expect(prepareArchive).not.toHaveBeenCalled()
+    expect(prepareAssets).not.toHaveBeenCalled()
     expect(ttsLoadCall()).toBeUndefined()
   })
 
@@ -894,25 +902,25 @@ describe('VoiceEngine Android platform branches', () => {
     RN.Platform.OS = 'android'
     // Park the prep on the model copy, and signal when it gets there — the test has
     // to wait for that, not just for a microtask tick.
-    let releaseModel: (path: string) => void = () => {}
-    let announceModelStep: () => void = () => {}
-    const reachedModelStep = new Promise<void>((resolve) => {
-      announceModelStep = resolve
+    let releaseStaging: () => void = () => {}
+    let announceStagingStep: () => void = () => {}
+    const reachedStagingStep = new Promise<void>((resolve) => {
+      announceStagingStep = resolve
     })
-    prepareModel.mockImplementation(
-      () =>
-        new Promise<string>((resolve) => {
-          releaseModel = resolve
-          announceModelStep()
+    prepareAssets.mockImplementation(
+      (includeTts: boolean) =>
+        new Promise((resolve) => {
+          releaseStaging = () => resolve(stagedAssets(includeTts))
+          announceStagingStep()
         })
     )
     voiceEngine.initialize('app-id', 'app-secret')
 
     const pending = voiceEngine.listen()
-    await reachedModelStep
+    await reachedStagingStep
     // No engine exists yet, so this cannot stop anything — it records the intent.
     await voiceEngine.stopListening()
-    releaseModel(ANDROID_MODEL_PATH)
+    releaseStaging()
     await pending
 
     // The user asked for it to stop before it ever started: no mic.

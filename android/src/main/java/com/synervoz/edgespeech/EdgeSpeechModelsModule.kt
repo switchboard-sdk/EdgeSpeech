@@ -1,5 +1,6 @@
 package com.synervoz.edgespeech
 
+import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
@@ -49,67 +50,91 @@ class EdgeSpeechModelsModule(private val reactContext: ReactApplicationContext) 
     }
   }
 
-  /** Copy asset [assetPath] to filesDir (only if missing/changed) and resolve its path. */
+  /**
+   * Stage the on-device models and resolve the paths the Switchboard nodes load by.
+   * One call rather than one per asset: they are always needed together, and this is the
+   * side that knows where they live inside the APK.
+   *
+   * [includeTts] extracts the TTS voice too (~82 MB). A listen()-only session doesn't
+   * need it, so it isn't paid for until the first speak().
+   *
+   * Resolves `{ sttModelPath, ttsModelPath?, ttsTokensPath?, ttsDataPath? }`. Rejects
+   * with `model_asset_missing` when the build never downloaded an asset, and with
+   * `model_prepare_error` / `model_archive_error` for genuine copy failures — JS maps
+   * those codes onto its own error codes.
+   */
   @ReactMethod
-  fun prepareModel(assetPath: String, promise: Promise) {
+  fun prepareAssets(includeTts: Boolean, promise: Promise) {
     try {
-      val assets = reactContext.assets
-      val dest = File(reactContext.filesDir, assetPath)
-      val stamp = File(dest.parentFile, "${dest.name}.stamp")
-
-      // available() is the asset's length without inflating it (openFd() only works on
-      // uncompressed assets, and the .bin is compressed in the APK). We compare it to the
-      // value recorded by the copy that produced dest, so what the number *means* doesn't
-      // matter — only that the same asset always reports the same one. A shipped model
-      // that changes reports a different one and is re-copied.
-      val assetSize = assets.open(assetPath).use { it.available().toLong() }
-
-      val stamped = if (stamp.exists()) stamp.readText().trim() else null
-      if (dest.exists() && stamped == assetSize.toString()) {
-        promise.resolve(dest.absolutePath)
-        return
+      val result = Arguments.createMap()
+      result.putString("sttModelPath", copyAsset(WHISPER_MODEL_ASSET))
+      if (includeTts) {
+        val root = extractArchive(TTS_ZIP_ASSET, TTS_EXTRACT_DIR)
+        val dir = "$root/$TTS_VOICE_DIR"
+        result.putString("ttsModelPath", "$dir/$TTS_MODEL_FILE")
+        result.putString("ttsTokensPath", "$dir/tokens.txt")
+        result.putString("ttsDataPath", "$dir/espeak-ng-data")
       }
-
-      // Copy to a sidecar and rename. Process death or a full disk mid-copy then leaves
-      // a .part to overwrite and no stamp, rather than a truncated model that every later
-      // launch treats as valid. The stamp lands last, so it only describes a finished copy.
-      dest.parentFile?.mkdirs()
-      val part = File(dest.parentFile, "${dest.name}.part")
-      assets.open(assetPath).use { input ->
-        part.outputStream().use { output -> input.copyTo(output, 1 shl 16) }
-      }
-      if (!part.renameTo(dest)) {
-        throw IOException("Could not move ${part.name} into place")
-      }
-      stamp.writeText(assetSize.toString())
-      promise.resolve(dest.absolutePath)
+      promise.resolve(result)
     } catch (e: FileNotFoundException) {
-      // The asset isn't in the APK — the app configured a model outside the set the
-      // build downloaded. Its own code so JS can tell it from a genuine copy failure.
+      // The asset isn't in the APK — the build never ran (or stripped) the model
+      // download. Its own code so JS can tell it from a genuine copy failure.
       promise.reject(
         "model_asset_missing",
-        "Model asset '$assetPath' is not bundled in this build.",
+        "Model asset is not bundled in this build: ${e.message}",
         e,
       )
+    } catch (e: ArchiveException) {
+      promise.reject("model_archive_error", e.message, e)
     } catch (e: Exception) {
-      promise.reject(
-        "model_prepare_error",
-        "Failed to prepare model asset '$assetPath': ${e.message}",
-        e,
-      )
+      promise.reject("model_prepare_error", "Failed to prepare model assets: ${e.message}", e)
     }
   }
 
-  /** Extract zip asset [assetZipPath] into filesDir/[destSubdir] once (`.extracted` marker); resolve that dir. Used for multi-file models (Sherpa TTS voice). */
-  @ReactMethod
-  fun prepareArchive(assetZipPath: String, destSubdir: String, promise: Promise) {
+  /** Copy asset [assetPath] to filesDir (only if missing/changed) and return its path. */
+  private fun copyAsset(assetPath: String): String {
+    val assets = reactContext.assets
+    val dest = File(reactContext.filesDir, assetPath)
+    val stamp = File(dest.parentFile, "${dest.name}.stamp")
+
+    // available() is the asset's length without inflating it (openFd() only works on
+    // uncompressed assets, and the .bin is compressed in the APK). We compare it to the
+    // value recorded by the copy that produced dest, so what the number *means* doesn't
+    // matter — only that the same asset always reports the same one. A shipped model
+    // that changes reports a different one and is re-copied.
+    val assetSize = assets.open(assetPath).use { it.available().toLong() }
+
+    val stamped = if (stamp.exists()) stamp.readText().trim() else null
+    if (dest.exists() && stamped == assetSize.toString()) {
+      return dest.absolutePath
+    }
+
+    // Copy to a sidecar and rename. Process death or a full disk mid-copy then leaves
+    // a .part to overwrite and no stamp, rather than a truncated model that every later
+    // launch treats as valid. The stamp lands last, so it only describes a finished copy.
+    dest.parentFile?.mkdirs()
+    val part = File(dest.parentFile, "${dest.name}.part")
+    assets.open(assetPath).use { input ->
+      part.outputStream().use { output -> input.copyTo(output, 1 shl 16) }
+    }
+    if (!part.renameTo(dest)) {
+      throw IOException("Could not move ${part.name} into place")
+    }
+    stamp.writeText(assetSize.toString())
+    return dest.absolutePath
+  }
+
+  /**
+   * Extract zip asset [assetZipPath] into filesDir/[destSubdir] once (`.extracted`
+   * marker) and return that dir. Used for multi-file models (the Sherpa TTS voice).
+   */
+  private fun extractArchive(assetZipPath: String, destSubdir: String): String {
+    val destRoot = File(reactContext.filesDir, destSubdir)
+    val marker = File(destRoot, ".extracted")
+    if (marker.exists()) {
+      return destRoot.absolutePath
+    }
     try {
-      val destRoot = File(reactContext.filesDir, destSubdir)
-      val marker = File(destRoot, ".extracted")
-      if (marker.exists()) {
-        promise.resolve(destRoot.absolutePath)
-        return
-      }
       destRoot.mkdirs()
       val canonicalRoot = destRoot.canonicalPath
       reactContext.assets.open(assetZipPath).use { raw ->
@@ -135,13 +160,27 @@ class EdgeSpeechModelsModule(private val reactContext: ReactApplicationContext) 
         }
       }
       marker.writeText("ok")
-      promise.resolve(destRoot.absolutePath)
+    } catch (e: FileNotFoundException) {
+      throw e // the zip isn't in the build — reported as model_asset_missing
     } catch (e: Exception) {
-      promise.reject("model_archive_error", "Failed to extract '$assetZipPath': ${e.message}", e)
+      throw ArchiveException("Failed to extract '$assetZipPath': ${e.message}", e)
     }
+    return destRoot.absolutePath
   }
+
+  /** An extraction failure, so prepareAssets can tell it from a model copy failure. */
+  private class ArchiveException(message: String?, cause: Throwable) : Exception(message, cause)
 
   companion object {
     const val NAME = "EdgeSpeechModels"
+
+    // Where the models live inside the APK, and where their files sit once extracted.
+    // Kept in step with android/build.gradle's download list; the JS side never sees
+    // these paths, only the resolved filesDir ones.
+    private const val WHISPER_MODEL_ASSET = "models/whisper/ggml-base.en.bin"
+    private const val TTS_ZIP_ASSET = "models/sherpa/tts/en_GB.zip"
+    private const val TTS_EXTRACT_DIR = "sherpa/tts/en_GB"
+    private const val TTS_VOICE_DIR = "en_GB/vits-piper-en_GB-southern_english_female-low"
+    private const val TTS_MODEL_FILE = "en_GB-southern_english_female-low.with_runtime_opt.ort"
   }
 }
