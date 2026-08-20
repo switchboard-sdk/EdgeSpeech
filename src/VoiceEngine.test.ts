@@ -95,6 +95,37 @@ describe('VoiceEngine transport', () => {
     await expect(voiceEngine.listen()).resolves.toBeUndefined() // initialized → proceeds
   })
 
+  it("starts at 'initializing' and settles to 'idle' once init returns", async () => {
+    expect(voiceEngine.currentState).toBe('initializing')
+    const states: string[] = []
+    voiceEngine.addListener('onStateChange', ({ state }) => states.push(state))
+
+    await voiceEngine.initialize('app-id', 'app-secret')
+
+    expect(states).toEqual(['initializing', 'idle'])
+    expect(voiceEngine.currentState).toBe('idle')
+  })
+
+  it("settles to 'idle' even when init fails — the failure goes to onError", async () => {
+    native.default.processCommand.mockImplementation((cmd: string) => {
+      const { id, params } = JSON.parse(cmd)
+      if (params?.actionName === 'initialize') {
+        return JSON.stringify({
+          jsonrpc: '2.0',
+          id,
+          error: { code: -32000, message: 'bad credentials' },
+        })
+      }
+      return JSON.stringify({ jsonrpc: '2.0', id, result: null })
+    })
+    const states: string[] = []
+    voiceEngine.addListener('onStateChange', ({ state }) => states.push(state))
+
+    await voiceEngine.initialize('app-id', 'app-secret')
+
+    expect(states).toEqual(['initializing', 'idle'])
+  })
+
   it('listen() creates the engine (bare-name nodes), enables AEC, then starts', async () => {
     voiceEngine.initialize('app-id', 'app-secret')
     const states: string[] = []
@@ -304,6 +335,58 @@ describe('VoiceEngine Android platform branches', () => {
     delete RN.NativeModules.EdgeSpeechModels
     delete RN.NativeModules.EdgeSpeechAudioSession
     jest.restoreAllMocks()
+  })
+
+  it("holds 'initializing' until the model staging settles", async () => {
+    RN.Platform.OS = 'android'
+    // Park the staging so the window between the Kotlin init and a ready model — the
+    // one 'initializing' exists to describe — can be observed.
+    let finishStaging: (path: string) => void = () => {}
+    prepareModel.mockReturnValueOnce(
+      new Promise<string>((resolve) => {
+        finishStaging = resolve
+      })
+    )
+    const states: string[] = []
+    voiceEngine.addListener('onStateChange', ({ state }) => states.push(state))
+
+    const init = voiceEngine.initialize('app-id', 'app-secret')
+    await new Promise<void>((resolve) => setImmediate(() => resolve()))
+    expect(voiceEngine.currentState).toBe('initializing')
+    expect(states).toEqual(['initializing'])
+
+    finishStaging(ANDROID_MODEL_PATH)
+    await init
+
+    expect(states).toEqual(['initializing', 'idle'])
+    expect(voiceEngine.currentState).toBe('idle')
+  })
+
+  it("defers a listen() issued during 'initializing' rather than rejecting it", async () => {
+    RN.Platform.OS = 'android'
+    let finishStaging: (path: string) => void = () => {}
+    prepareModel.mockReturnValueOnce(
+      new Promise<string>((resolve) => {
+        finishStaging = resolve
+      })
+    )
+    const states: string[] = []
+    voiceEngine.addListener('onStateChange', ({ state }) => states.push(state))
+
+    voiceEngine.initialize('app-id', 'app-secret')
+    const listening = voiceEngine.listen()
+    await new Promise<void>((resolve) => setImmediate(() => resolve()))
+    // Parked on the init chain: no engine built, no mic opened, and no rejection.
+    expect(findAction('createEngine')).toBeUndefined()
+    expect(states).toEqual(['initializing'])
+
+    finishStaging(ANDROID_MODEL_PATH)
+    await listening
+
+    // 'listening' comes after the settle, never clobbered by it — listen() awaits the
+    // same promise the settle is chained onto.
+    expect(states).toEqual(['initializing', 'idle', 'listening'])
+    expect(voiceEngine.currentState).toBe('listening')
   })
 
   it('forces Whisper useGPU=false on Android even when not a simulator', async () => {

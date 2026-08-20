@@ -11,6 +11,7 @@ jest.mock('../src/SwitchboardVoiceModule', () => ({
   __esModule: true,
   default: {
     addListener: jest.fn(),
+    getState: jest.fn(() => 'idle'),
     initialize: jest.fn(() => Promise.resolve()),
     configure: jest.fn(),
     listen: jest.fn(() => Promise.resolve()),
@@ -350,35 +351,29 @@ describe('useEdgeSpeech', () => {
     })
   })
 
-  describe('isInitializing', () => {
-    const RN = require('react-native')
-    const originalOS = RN.Platform.OS
-
+  describe('initializing state', () => {
     afterEach(() => {
-      RN.Platform.OS = originalOS
+      // clearAllMocks() keeps implementations, so restore the default for later suites.
+      jest.mocked(SwitchboardVoiceModule.getState).mockReturnValue('idle')
     })
 
-    it('is false on iOS, which stages nothing', async () => {
-      RN.Platform.OS = 'ios'
+    it("seeds voiceState from the engine, so a mid-init mount reads 'initializing'", () => {
+      jest.mocked(SwitchboardVoiceModule.getState).mockReturnValue('initializing')
+
       const { result } = renderHook(() => useEdgeSpeech(), { wrapper })
 
-      expect(result.current.isInitializing).toBe(false)
+      expect(result.current.voiceState).toBe('initializing')
     })
 
-    it('is true on Android until the staging settles', async () => {
-      RN.Platform.OS = 'android'
-      let finishStaging: () => void = () => {}
-      jest
-        .mocked(SwitchboardVoiceModule.initialize)
-        .mockReturnValueOnce(new Promise<void>((resolve) => (finishStaging = resolve)))
-
+    it('leaves initializing when the engine settles', () => {
+      jest.mocked(SwitchboardVoiceModule.getState).mockReturnValue('initializing')
       const { result } = renderHook(() => useEdgeSpeech(), { wrapper })
-      expect(result.current.isInitializing).toBe(true)
 
-      await act(async () => {
-        finishStaging()
+      act(() => {
+        fireNativeEvent('onStateChange', { state: 'idle' })
       })
-      expect(result.current.isInitializing).toBe(false)
+
+      expect(result.current.voiceState).toBe('idle')
     })
   })
 })

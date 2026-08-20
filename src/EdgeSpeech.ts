@@ -37,7 +37,9 @@ import type {
  */
 class EdgeSpeechAPI {
   private _isConfigured = false
-  private _currentState: VoiceState = 'idle'
+  // Mirrors the engine, whose own starting state is 'initializing' until configure()
+  // has kicked off initialize() and that has settled.
+  private _currentState: VoiceState = 'initializing'
   private _onTranscript: TranscriptCallback | null = null
   private _onStateChange: StateChangeCallback | null = null
   private _onInterrupted: InterruptedCallback | null = null
@@ -272,7 +274,7 @@ class EdgeSpeechAPI {
     this._subscriptions.forEach((sub) => sub.remove())
     this._subscriptions = []
     this._isConfigured = false
-    this._currentState = 'idle'
+    this._currentState = 'initializing'
     this._listenersSetup = false
     this._onTranscript = null
     this._onStateChange = null

@@ -1,11 +1,9 @@
-import React, { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
-import { Platform } from 'react-native'
+import React, { createContext, useContext, useEffect, type ReactNode } from 'react'
 import SwitchboardVoiceModule from './SwitchboardVoiceModule'
 
 export interface EdgeSpeechContextValue {
   addListener: typeof SwitchboardVoiceModule.addListener
-  /** Android: true until the models are ready — a listen()/speak() before that waits. */
-  isInitializing: boolean
+  getState: typeof SwitchboardVoiceModule.getState
   listen: () => Promise<void>
   stopListening: () => Promise<void>
   speak: (text: string) => Promise<void>
@@ -42,9 +40,6 @@ export function EdgeSpeechProvider({
   bufferSize,
   children,
 }: EdgeSpeechProviderProps) {
-  // Android stages the model files during initialize(); iOS has nothing to wait for.
-  const [isInitializing, setIsInitializing] = useState(Platform.OS === 'android')
-
   if (!appId || appId.trim() === '') {
     throw new Error('EdgeSpeechProvider: appId is required')
   }
@@ -74,15 +69,11 @@ export function EdgeSpeechProvider({
   }, [sttModel, ttsVoice, vadSensitivity, sampleRate, bufferSize])
 
   useEffect(() => {
-    let active = true
-    SwitchboardVoiceModule.initialize(appId, appSecret).finally(() => {
-      if (active) {
-        setIsInitializing(false)
-      }
-    })
+    // Init reports its own progress through onStateChange ('initializing' → 'idle'),
+    // so there is nothing to do with the promise here.
+    SwitchboardVoiceModule.initialize(appId, appSecret)
 
     return () => {
-      active = false
       SwitchboardVoiceModule.stopListening().catch(() => {})
     }
   }, [appId, appSecret])
@@ -90,7 +81,7 @@ export function EdgeSpeechProvider({
   const value: EdgeSpeechContextValue = {
     // Keep NativeModule method bound to avoid losing JSI `this` context.
     addListener: SwitchboardVoiceModule.addListener.bind(SwitchboardVoiceModule),
-    isInitializing,
+    getState: SwitchboardVoiceModule.getState.bind(SwitchboardVoiceModule),
     listen: () => SwitchboardVoiceModule.listen(),
     stopListening: () => SwitchboardVoiceModule.stopListening(),
     speak: (text) => SwitchboardVoiceModule.speak(text),

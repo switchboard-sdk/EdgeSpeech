@@ -118,8 +118,13 @@ function VoiceApp(): React.JSX.Element {
     setConversationHistory([])
   }
 
+  // Android stages ~140 MB of model files at startup; the UI waits it out.
+  const isInitializing = voiceState === 'initializing'
+
   const getStateColor = () => {
     switch (voiceState) {
+      case 'initializing':
+        return '#9E9E9E'
       case 'idle':
         return '#666'
       case 'listening':
@@ -202,10 +207,19 @@ function VoiceApp(): React.JSX.Element {
           <Text style={styles.sectionTitle}>Voice Input</Text>
           <View style={styles.buttonRow}>
             <TouchableOpacity
-              style={[styles.button, voiceState === 'listening' && styles.buttonActive]}
+              style={[
+                styles.button,
+                voiceState === 'listening' && styles.buttonActive,
+                isInitializing && styles.buttonDisabled,
+              ]}
+              disabled={isInitializing}
               onPress={voiceState === 'listening' ? handleStopListening : handleStartListening}>
               <Text style={styles.buttonText}>
-                {voiceState === 'listening' ? 'Stop Listening' : 'Start Listening'}
+                {isInitializing
+                  ? 'Loading models…'
+                  : voiceState === 'listening'
+                    ? 'Stop Listening'
+                    : 'Start Listening'}
               </Text>
             </TouchableOpacity>
           </View>
@@ -230,7 +244,8 @@ function VoiceApp(): React.JSX.Element {
           />
           <View style={styles.buttonRow}>
             <TouchableOpacity
-              style={[styles.button, styles.buttonPrimary]}
+              style={[styles.button, styles.buttonPrimary, isInitializing && styles.buttonDisabled]}
+              disabled={isInitializing}
               onPress={handleStartSpeaking}>
               <Text style={styles.buttonText}>Speak</Text>
             </TouchableOpacity>
@@ -315,6 +330,9 @@ const styles = StyleSheet.create({
   },
   buttonDanger: {
     backgroundColor: '#d32f2f',
+  },
+  buttonDisabled: {
+    backgroundColor: '#bdbdbd',
   },
   buttonText: {
     color: '#fff',

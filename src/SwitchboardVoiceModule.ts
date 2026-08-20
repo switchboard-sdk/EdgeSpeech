@@ -8,9 +8,10 @@ export type { VoiceState, TranscriptEvent, StateChangeEvent, ErrorEvent }
  *
  * Historically this file was the Expo `requireNativeModule` binding. The native
  * transport is now a bare C++ TurboModule driven from TypeScript ({@link
- * VoiceEngine}), but this module keeps the exact same shape — the seven methods
- * plus `addListener` — so `EdgeSpeech`, `EdgeSpeechProvider`, `useEdgeSpeech`,
- * and any downstream consumers are unaffected.
+ * VoiceEngine}), but this module keeps the same shape — the seven action methods
+ * plus `addListener` — so `EdgeSpeech`, `EdgeSpeechProvider`, `useEdgeSpeech`, and
+ * any downstream consumers are unaffected. `getState()` is the one addition, for
+ * seeding a consumer that mounts after the state change it missed.
  */
 const SwitchboardVoiceModule = {
   /** Resolves once init has settled — on Android, including the model staging. */
@@ -20,6 +21,11 @@ const SwitchboardVoiceModule = {
 
   configure(config: Record<string, unknown>): void {
     voiceEngine.configure(config)
+  },
+
+  /** The current state, for seeding a consumer that mounts mid-initialization. */
+  getState(): VoiceState {
+    return voiceEngine.currentState
   },
 
   listen(): Promise<void> {

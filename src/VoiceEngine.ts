@@ -96,6 +96,13 @@ class VoiceEngine {
   private isSpeaking = false
   private eventsWired = false
 
+  /**
+   * The state last emitted via onStateChange. Starts at 'initializing' so a consumer
+   * mounting before (or during) initialize() reads the truth rather than a premature
+   * 'idle' — see settleInitializing().
+   */
+  private state: VoiceState = 'initializing'
+
   /** Why the last initialize() failed, if it did — folded into NOT_INITIALIZED rejections. */
   private initFailureReason: string | null = null
 
@@ -136,6 +143,16 @@ class VoiceEngine {
 
   private readonly listeners = new Map<EdgeSpeechEventName, Set<Listener>>()
 
+  // MARK: - Public state API
+
+  /**
+   * The current state, for consumers that mount after an onStateChange they missed —
+   * `useEdgeSpeech` seeds its `voiceState` from this.
+   */
+  get currentState(): VoiceState {
+    return this.state
+  }
+
   // MARK: - Public listener API (mirrors the old Expo NativeModule.addListener)
 
   addListener<K extends EdgeSpeechEventName>(
@@ -175,6 +192,8 @@ class VoiceEngine {
     const client = this.ensureClient()
     this.wireEvents()
     this.initFailureReason = null
+    // Re-announce it: a retry after a failed init starts from 'idle'.
+    this.setState('initializing')
 
     if (Platform.OS === 'android') {
       // Android inits via Kotlin (registers the PlatformInfoProvider → native-lib
@@ -182,9 +201,9 @@ class VoiceEngine {
       // engine. The flag is optimistic and must be set first — initializeAndroidSdk()
       // clears it if it fails synchronously, so setting it after would undo that.
       this.isInitialized = true
-      this.androidInitPromise = this.initializeAndroidSdk(appId, appSecret).then(() =>
-        this.stageAndroidAssets()
-      )
+      this.androidInitPromise = this.initializeAndroidSdk(appId, appSecret)
+        .then(() => this.stageAndroidAssets())
+        .then(() => this.settleInitializing())
       return this.androidInitPromise
     }
 
@@ -203,6 +222,7 @@ class VoiceEngine {
       // code or an SDK init-state query would be more robust.
       if (/already.*initialized/i.test(message)) {
         this.isInitialized = true
+        this.settleInitializing()
         return Promise.resolve()
       }
       // Surface genuine failures via onError and stay uninitialized (a later
@@ -213,6 +233,7 @@ class VoiceEngine {
       return Promise.resolve()
     }
     this.isInitialized = true
+    this.settleInitializing()
     return Promise.resolve()
   }
 
@@ -264,7 +285,23 @@ class VoiceEngine {
   private failInitialization(message: string): void {
     this.isInitialized = false
     this.initFailureReason = message
+    this.settleInitializing()
     this.emitError('INIT_FAILED', message)
+  }
+
+  /**
+   * Leave 'initializing' once init has settled, succeeded or not — a failure is
+   * reported through onError, not by parking the state machine.
+   *
+   * Guarded on still being 'initializing' so it only ever announces the transition
+   * once: on Android a failure settles mid-chain via failInitialization(), and the
+   * end of that same chain calls here again. The guard also keeps a state reached
+   * while init was still in flight from being dragged back to 'idle'.
+   */
+  private settleInitializing(): void {
+    if (this.state === 'initializing') {
+      this.setState('idle')
+    }
   }
 
   /** NOT_INITIALIZED, naming the underlying init failure when there was one. */
@@ -856,6 +893,7 @@ class VoiceEngine {
   }
 
   private setState(state: VoiceState): void {
+    this.state = state
     this.emit('onStateChange', { state })
   }
 
@@ -891,6 +929,7 @@ class VoiceEngine {
     this.isListening = false
     this.isSpeaking = false
     this.eventsWired = false
+    this.state = 'initializing'
     this.initFailureReason = null
     this.androidModelPath = null
     this.androidTtsLoaded = false
