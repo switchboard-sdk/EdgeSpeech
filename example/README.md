@@ -4,31 +4,15 @@ The app has two sections: **Voice Input** for transcription (tap "Start Listenin
 
 ## Conversation Mode's LLM
 
-Everything except the LLM step runs on-device. For the LLM turn, `services/chatService.ts` posts to
-the Switchboard API's chat endpoint at `https://api.switchboard.audio/chat`, authenticated with the
-**same App ID and App Secret** the SDK is initialised with — `configureChat()` is called once in
-`App.tsx` with those values.
+Everything but the LLM turn runs on-device. For that turn, `services/chatService.ts` sends the
+transcript to the Switchboard API, which proxies it to the model provider and returns the reply, so
+no provider API key is shipped in the app and you don't need to supply one — the App ID and App
+Secret the SDK is initialised with are the only credentials involved. To use your own backend
+instead, replace `chatService.ts`; `sendToChat(message, history)` is the only contract the app
+depends on.
 
-No model-provider API key is needed here, and none is shipped in the app. Chat is enabled for your
-app in the [console](https://console.switchboard.audio) and the API talks to the model provider
-server-side; the app only ever receives generated text.
-
-The API owns the request shape. It picks the model and output length and trims history, so the app
-sends only `messages` — no `model`, no `max_tokens`. It also rate limits per app and answers `429`
-with a `Retry-After`, which `chatService` honours in preference to its own backoff.
-
-| Status | Meaning                       | Handling                                         |
-| ------ | ----------------------------- | ------------------------------------------------ |
-| `429`  | Per-app rate limit reached    | Retried, waiting the `Retry-After` the API sends |
-| `401`  | App credentials rejected      | Not retried — fix your `.env`                    |
-| `400`  | Chat not enabled for this app | Not retried — enable it in the console           |
-
-Two things to know:
-
-- **Transcripts leave the device in Conversation Mode.** Only the text, and only to our API — but
-  the transcription, VAD and speech synthesis around it are entirely on-device.
-- **To use your own backend instead**, replace `chatService.ts`. The
-  `sendToChat(message, history)` signature is the only contract the app depends on.
+> [!WARNING]
+> The demo credentials in `.env.example` come with a limited amount of chat credits.
 
 ## Prerequisites
 
