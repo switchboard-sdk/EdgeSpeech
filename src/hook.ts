@@ -16,7 +16,7 @@ export function useEdgeSpeech() {
   const [transcript, setTranscript] = useState('')
   const transcriptCompleteCallback = useRef<((text: string) => void) | null>(null)
   // Seeded from the engine, not hardcoded: a component mounting during Android's
-  // model staging must read 'initializing', not a premature 'idle'.
+  // model staging must read 'initializing', not the 'idle' a fixed seed would give.
   const [voiceState, setVoiceState] = useState<VoiceState>(getState)
   const [error, setError] = useState<string | null>(null)
   const [hasMicrophonePermission, setHasMicrophonePermission] = useState<boolean | null>(null)

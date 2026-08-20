@@ -95,18 +95,19 @@ describe('VoiceEngine transport', () => {
     await expect(voiceEngine.listen()).resolves.toBeUndefined() // initialized → proceeds
   })
 
-  it("starts at 'initializing' and settles to 'idle' once init returns", async () => {
-    expect(voiceEngine.currentState).toBe('initializing')
+  it("starts at 'idle' and settles to 'ready' once init returns", async () => {
+    // 'idle' means the SDK is not up — nothing has called initialize() yet.
+    expect(voiceEngine.currentState).toBe('idle')
     const states: string[] = []
     voiceEngine.addListener('onStateChange', ({ state }) => states.push(state))
 
     await voiceEngine.initialize('app-id', 'app-secret')
 
-    expect(states).toEqual(['initializing', 'idle'])
-    expect(voiceEngine.currentState).toBe('idle')
+    expect(states).toEqual(['initializing', 'ready'])
+    expect(voiceEngine.currentState).toBe('ready')
   })
 
-  it("settles to 'idle' even when init fails — the failure goes to onError", async () => {
+  it("returns to 'idle' when init fails, rather than claiming 'ready'", async () => {
     native.default.processCommand.mockImplementation((cmd: string) => {
       const { id, params } = JSON.parse(cmd)
       if (params?.actionName === 'initialize') {
@@ -123,7 +124,9 @@ describe('VoiceEngine transport', () => {
 
     await voiceEngine.initialize('app-id', 'app-secret')
 
+    // Back to 'idle' — a dead SDK must not look operable. The cause went to onError.
     expect(states).toEqual(['initializing', 'idle'])
+    expect(voiceEngine.currentState).toBe('idle')
   })
 
   it('listen() creates the engine (bare-name nodes), enables AEC, then starts', async () => {
@@ -196,6 +199,20 @@ describe('VoiceEngine transport', () => {
     expect(states).toEqual(['processing', 'listening'])
   })
 
+  it("stopListening() lands on 'ready' — initialized and stopped, not 'idle'", async () => {
+    // The example app's conversation loop resumes on this transition, so the
+    // distinction between 'ready' (stopped) and 'idle' (SDK not up) is load-bearing.
+    voiceEngine.initialize('app-id', 'app-secret')
+    await voiceEngine.listen()
+    const states: string[] = []
+    voiceEngine.addListener('onStateChange', ({ state }) => states.push(state))
+
+    await voiceEngine.stopListening()
+
+    expect(states).toEqual(['ready'])
+    expect(voiceEngine.currentState).toBe('ready')
+  })
+
   it('does not report a state for events that arrive after stopListening()', async () => {
     voiceEngine.initialize('app-id', 'app-secret')
     await voiceEngine.listen()
@@ -206,7 +223,7 @@ describe('VoiceEngine transport', () => {
     voiceEngine.addListener('onTranscript', ({ text }) => transcripts.push(text))
 
     // The graph is down but its events can still be in flight; they must not drag the
-    // state back off 'idle'.
+    // state back off 'ready'.
     native.emit(JSON.stringify({ objectURI: 'vadNode', name: 'speechEnded' }))
     native.emit(JSON.stringify({ objectURI: 'sttNode', name: 'transcribed', data: { text: 'hi' } }))
 
@@ -358,8 +375,8 @@ describe('VoiceEngine Android platform branches', () => {
     finishStaging(ANDROID_MODEL_PATH)
     await init
 
-    expect(states).toEqual(['initializing', 'idle'])
-    expect(voiceEngine.currentState).toBe('idle')
+    expect(states).toEqual(['initializing', 'ready'])
+    expect(voiceEngine.currentState).toBe('ready')
   })
 
   it("defers a listen() issued during 'initializing' rather than rejecting it", async () => {
@@ -385,7 +402,7 @@ describe('VoiceEngine Android platform branches', () => {
 
     // 'listening' comes after the settle, never clobbered by it — listen() awaits the
     // same promise the settle is chained onto.
-    expect(states).toEqual(['initializing', 'idle', 'listening'])
+    expect(states).toEqual(['initializing', 'ready', 'listening'])
     expect(voiceEngine.currentState).toBe('listening')
   })
 

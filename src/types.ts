@@ -1,15 +1,18 @@
 /**
  * Voice processing states.
  *
- * `initializing` covers SDK startup — on Android that includes staging the STT/TTS
- * model files, which takes seconds. A `listen()`/`speak()` issued during it waits
- * rather than failing, so gating your UI on it is a courtesy, not a requirement.
+ * Three of these describe the SDK's lifecycle rather than the audio pipeline:
  *
- * `idle` means "not initializing and not running", which covers a *failed* init as
- * well as a ready or stopped engine — it is not a readiness signal. An init failure
- * is reported through `onError`.
+ * - `idle` — the SDK is not up: either `initialize()` has not run yet, or it ran and
+ *   failed. `onError` (and the hook's `error`) says which. `listen()`/`speak()` reject
+ *   with `NOT_INITIALIZED` from here.
+ * - `initializing` — init is in flight. On Android that includes staging the STT/TTS
+ *   model files, which takes seconds. A `listen()`/`speak()` issued now waits for it
+ *   rather than failing, so gating your UI on this state is a courtesy, not a duty.
+ * - `ready` — initialized, nothing running. This is the state that means "operable",
+ *   not `idle`.
  */
-export type VoiceState = 'initializing' | 'idle' | 'listening' | 'processing' | 'speaking'
+export type VoiceState = 'idle' | 'initializing' | 'ready' | 'listening' | 'processing' | 'speaking'
 
 /**
  * Configuration for SwitchboardVoice

@@ -32,12 +32,33 @@ is a thin delegate over the Switchboard SDK's `SwitchboardJSONRPC`.
 
 ## [Unreleased]
 
+### Changed — BREAKING
+
+- `VoiceState` now separates "the SDK is not up" from "the SDK is up and waiting":
+  `'idle' | 'initializing' | 'ready' | 'listening' | 'processing' | 'speaking'`.
+  **`'idle'` has changed meaning** — it no longer means "ready and waiting", it means the SDK is
+  not initialized (either `initialize()` has not run, or it failed). The initialized-and-waiting
+  state is now `'ready'`. Code that gates on `voiceState === 'idle'` must move to `'ready'`;
+  because both are valid `VoiceState` values, TypeScript will **not** flag the change for you.
+- A failed `initialize()` now reports `'idle'` instead of looking indistinguishable from a ready
+  engine; the cause still arrives via `onError` / the hook's `error`.
+- `stopListening()` and a `stopSpeaking()` with no listening session now emit `'ready'`
+  (previously `'idle'`).
+
 ### Added
 
+- `'initializing'` state, covering SDK startup and the Android STT/TTS model staging. A
+  `listen()`/`speak()` issued during it waits rather than failing.
+- `useEdgeSpeech().voiceState` is seeded from the engine's current state, so a component that
+  mounts mid-initialization reads `'initializing'` rather than a stale value.
 - Initial project scaffolding
 - TurboModule architecture for React Native bridge
 - iOS native module setup
 - TypeScript types and configuration
+
+### Removed
+
+- `useEdgeSpeech().isInitializing` — replaced by `voiceState === 'initializing'`.
 
 ## [0.1.0] - TBD
 

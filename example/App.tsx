@@ -81,7 +81,7 @@ function VoiceApp(): React.JSX.Element {
 
   // Resume listening after TTS completes in conversation mode
   useEffect(() => {
-    if (prevVoiceStateRef.current === 'speaking' && voiceState === 'idle') {
+    if (prevVoiceStateRef.current === 'speaking' && voiceState === 'ready') {
       if (conversationMode) {
         listen()
       }
@@ -118,14 +118,16 @@ function VoiceApp(): React.JSX.Element {
     setConversationHistory([])
   }
 
-  // Android stages ~140 MB of model files at startup; the UI waits it out.
-  const isInitializing = voiceState === 'initializing'
+  // Not operable yet: 'idle' means the SDK is not up (nothing initialized it, or init
+  // failed), 'initializing' means Android is staging ~140 MB of model files.
+  const isStarting = voiceState === 'idle' || voiceState === 'initializing'
 
   const getStateColor = () => {
     switch (voiceState) {
+      case 'idle':
       case 'initializing':
         return '#9E9E9E'
-      case 'idle':
+      case 'ready':
         return '#666'
       case 'listening':
         return '#4CAF50'
@@ -210,13 +212,13 @@ function VoiceApp(): React.JSX.Element {
               style={[
                 styles.button,
                 voiceState === 'listening' && styles.buttonActive,
-                isInitializing && styles.buttonDisabled,
+                isStarting && styles.buttonDisabled,
               ]}
-              disabled={isInitializing}
+              disabled={isStarting}
               onPress={voiceState === 'listening' ? handleStopListening : handleStartListening}>
               <Text style={styles.buttonText}>
-                {isInitializing
-                  ? 'Loading models…'
+                {isStarting
+                  ? 'Preparing…'
                   : voiceState === 'listening'
                     ? 'Stop Listening'
                     : 'Start Listening'}
@@ -244,8 +246,8 @@ function VoiceApp(): React.JSX.Element {
           />
           <View style={styles.buttonRow}>
             <TouchableOpacity
-              style={[styles.button, styles.buttonPrimary, isInitializing && styles.buttonDisabled]}
-              disabled={isInitializing}
+              style={[styles.button, styles.buttonPrimary, isStarting && styles.buttonDisabled]}
+              disabled={isStarting}
               onPress={handleStartSpeaking}>
               <Text style={styles.buttonText}>Speak</Text>
             </TouchableOpacity>

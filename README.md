@@ -238,7 +238,7 @@ Access the state and actions from any component with the `useEdgeSpeech` hook.
 const {
   // State
   transcript,              // string       — live interim transcript (clears on final)
-  voiceState,              // 'initializing' | 'idle' | 'listening' | 'processing' | 'speaking'
+  voiceState,              // see the state table below
   error,                   // string | null
   hasMicrophonePermission, // boolean | null
 
@@ -254,6 +254,24 @@ const {
   onInterrupted,        // (cb: () => void) => void — fires when VAD interrupts TTS
 } = useEdgeSpeech()
 ```
+
+`voiceState` passes through three lifecycle states before it reaches the audio pipeline:
+
+| State          | Meaning                                              |
+| -------------- | ---------------------------------------------------- |
+| `idle`         | SDK not up — not initialized yet, or the init failed |
+| `initializing` | init in flight, including the Android model staging  |
+| `ready`        | initialized, nothing running                         |
+| `listening`    | microphone open, VAD watching for speech             |
+| `processing`   | Whisper decoding an utterance                        |
+| `speaking`     | TTS playing (microphone stays open for barge-in)     |
+
+`speak()` opens the microphone even from `ready`: one combined engine keeps echo cancellation live
+so barge-in works. That is also why finishing an utterance leaves you in `listening` rather than
+back at `ready`.
+
+Gate your UI on `ready`, not on `idle` — `idle` is also where a failed init lands, and `error` is
+what tells you one happened.
 
 > [!NOTE]
 > On Android the STT/TTS models are copied out of the APK on first launch, which can take several

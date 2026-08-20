@@ -11,7 +11,7 @@ jest.mock('../src/SwitchboardVoiceModule', () => ({
   __esModule: true,
   default: {
     addListener: jest.fn(() => ({ remove: jest.fn() })),
-    getState: jest.fn(() => 'idle'),
+    getState: jest.fn(() => 'ready'),
     initialize: jest.fn(() => Promise.resolve()),
     configure: jest.fn(),
     listen: jest.fn(() => Promise.resolve()),

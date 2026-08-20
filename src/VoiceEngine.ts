@@ -82,7 +82,7 @@ const ANDROID_VOICE_COMMUNICATION_INPUT_PRESET = 7 // oboe InputPreset.VoiceComm
  * The on-device voice pipeline, authored entirely in TypeScript over the
  * Switchboard JSON-RPC channel. This is the TypeScript port of the old native
  * `AudioGraphManager.swift`: it builds the combined VAD → STT + TTS graph,
- * creates the engine, runs the idle/listening/speaking state machine, handles
+ * creates the engine, runs the ready/listening/speaking state machine, handles
  * barge-in, and translates raw SDK events into EdgeSpeech's public events.
  *
  * A single combined engine (microphone + speaker) keeps VoiceProcessingIO (AEC)
@@ -97,11 +97,11 @@ class VoiceEngine {
   private eventsWired = false
 
   /**
-   * The state last emitted via onStateChange. Starts at 'initializing' so a consumer
-   * mounting before (or during) initialize() reads the truth rather than a premature
-   * 'idle' — see settleInitializing().
+   * The state last emitted via onStateChange. Starts at 'idle' — the SDK is not up
+   * until initialize() has run, and a failed init returns here (see settleInit()).
+   * 'ready' is the initialized-and-waiting state.
    */
-  private state: VoiceState = 'initializing'
+  private state: VoiceState = 'idle'
 
   /** Why the last initialize() failed, if it did — folded into NOT_INITIALIZED rejections. */
   private initFailureReason: string | null = null
@@ -192,7 +192,7 @@ class VoiceEngine {
     const client = this.ensureClient()
     this.wireEvents()
     this.initFailureReason = null
-    // Re-announce it: a retry after a failed init starts from 'idle'.
+    // Announced on every attempt: a retry after a failed init starts from 'idle'.
     this.setState('initializing')
 
     if (Platform.OS === 'android') {
@@ -203,7 +203,7 @@ class VoiceEngine {
       this.isInitialized = true
       this.androidInitPromise = this.initializeAndroidSdk(appId, appSecret)
         .then(() => this.stageAndroidAssets())
-        .then(() => this.settleInitializing())
+        .then(() => this.settleInit('ready'))
       return this.androidInitPromise
     }
 
@@ -222,7 +222,7 @@ class VoiceEngine {
       // code or an SDK init-state query would be more robust.
       if (/already.*initialized/i.test(message)) {
         this.isInitialized = true
-        this.settleInitializing()
+        this.settleInit('ready')
         return Promise.resolve()
       }
       // Surface genuine failures via onError and stay uninitialized (a later
@@ -233,7 +233,7 @@ class VoiceEngine {
       return Promise.resolve()
     }
     this.isInitialized = true
-    this.settleInitializing()
+    this.settleInit('ready')
     return Promise.resolve()
   }
 
@@ -285,22 +285,23 @@ class VoiceEngine {
   private failInitialization(message: string): void {
     this.isInitialized = false
     this.initFailureReason = message
-    this.settleInitializing()
+    this.settleInit('idle')
     this.emitError('INIT_FAILED', message)
   }
 
   /**
-   * Leave 'initializing' once init has settled, succeeded or not — a failure is
-   * reported through onError, not by parking the state machine.
+   * Leave 'initializing' once init has settled: 'ready' when the SDK came up, 'idle'
+   * when it didn't — the cause is reported through onError, not by parking the state
+   * machine on a spinner.
    *
-   * Guarded on still being 'initializing' so it only ever announces the transition
-   * once: on Android a failure settles mid-chain via failInitialization(), and the
-   * end of that same chain calls here again. The guard also keeps a state reached
-   * while init was still in flight from being dragged back to 'idle'.
+   * The 'initializing' guard is load-bearing, not just de-duplication. On Android a
+   * failure settles to 'idle' mid-chain via failInitialization(), and the tail of that
+   * same chain calls here again with 'ready'; without the guard that tail would claim
+   * a dead SDK is operable. It also protects a state reached while init was in flight.
    */
-  private settleInitializing(): void {
+  private settleInit(next: 'ready' | 'idle'): void {
     if (this.state === 'initializing') {
-      this.setState('idle')
+      this.setState(next)
     }
   }
 
@@ -589,7 +590,7 @@ class VoiceEngine {
     this.isListening = false
     this.isSpeaking = false
     this.disableAndroidCommunicationRoute()
-    this.setState('idle')
+    this.setState('ready')
   }
 
   async speak(text: string): Promise<void> {
@@ -636,7 +637,7 @@ class VoiceEngine {
     // isSpeaking) does not fire onTTSComplete after an explicit cancellation.
     this.isSpeaking = false
     this.ensureClient().callAction('ttsNode', 'stop', {})
-    this.setState(this.isListening ? 'listening' : 'idle')
+    this.setState(this.isListening ? 'listening' : 'ready')
   }
 
   /**
@@ -929,7 +930,7 @@ class VoiceEngine {
     this.isListening = false
     this.isSpeaking = false
     this.eventsWired = false
-    this.state = 'initializing'
+    this.state = 'idle'
     this.initFailureReason = null
     this.androidModelPath = null
     this.androidTtsLoaded = false

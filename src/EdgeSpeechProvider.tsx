@@ -69,7 +69,7 @@ export function EdgeSpeechProvider({
   }, [sttModel, ttsVoice, vadSensitivity, sampleRate, bufferSize])
 
   useEffect(() => {
-    // Init reports its own progress through onStateChange ('initializing' → 'idle'),
+    // Init reports its own progress through onStateChange ('initializing' → 'ready'),
     // so there is nothing to do with the promise here.
     SwitchboardVoiceModule.initialize(appId, appSecret)
 
