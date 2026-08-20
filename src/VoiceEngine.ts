@@ -33,45 +33,23 @@ interface VoiceEngineConfig {
   vadSensitivity: number
   sampleRate: number
   bufferSize: number
-  ttsVoice: string
-  sttModel: string
 }
 
-// Maps `sttModel` → bundled asset path (Android only; iOS ignores `sttModel` and uses
-// the base model in the SDK framework). Gradle downloads base by default; tiny is half
-// the size, less accurate, and bundled only via the `edgespeechModels` property.
-const ANDROID_MODEL_ASSETS: Record<string, string> = {
-  'whisper-base-en': 'models/whisper/ggml-base.en.bin',
-  'whisper-tiny-en': 'models/whisper/ggml-tiny.en.bin',
+// The one Whisper model, as an Android asset path. iOS reads the identical model from
+// inside SwitchboardWhisper.framework, which is why there is nothing to select: the
+// framework bundles base.en alone (plus its CoreML encoder), so a second model would be
+// available on one platform only. Kept in step with android/build.gradle's model list.
+const ANDROID_WHISPER_MODEL_ASSET = 'models/whisper/ggml-base.en.bin'
+
+// The one Sherpa TTS voice: bundled zip, plus the paths inside it. Extracted to filesDir
+// once. iOS needs no equivalent — Sherpa.TTS hardcodes "en" in its constructor and loads
+// this same voice out of SwitchboardSherpa.framework by itself.
+const ANDROID_TTS_VOICE = {
+  zipAsset: 'models/sherpa/tts/en_GB.zip',
+  extractDir: 'sherpa/tts/en_GB',
+  voiceDir: 'en_GB/vits-piper-en_GB-southern_english_female-low',
+  modelFile: 'en_GB-southern_english_female-low.with_runtime_opt.ort',
 }
-
-// The `edgespeechModels` Gradle property names assets relative to the assets/models root,
-// so the download list reads `whisper/ggml-tiny.en.bin` where this file says
-// `models/whisper/ggml-tiny.en.bin`. Only used to phrase the not-bundled error.
-const ANDROID_MODEL_ASSET_ROOT = 'models/'
-
-// Android Sherpa TTS voices keyed by `ttsVoice`: bundled zip + in-zip paths.
-// Extracted to filesDir once; iOS uses the SDK-framework voices.
-const ANDROID_TTS_VOICES: Record<
-  string,
-  { zipAsset: string; voiceDir: string; modelFile: string }
-> = {
-  en_GB: {
-    zipAsset: 'models/sherpa/tts/en_GB.zip',
-    voiceDir: 'en_GB/vits-piper-en_GB-southern_english_female-low',
-    modelFile: 'en_GB-southern_english_female-low.with_runtime_opt.ort',
-  },
-  de_DE: {
-    zipAsset: 'models/sherpa/tts/de_DE.zip',
-    voiceDir: 'de_DE/vits-piper-de_DE-thorsten-low',
-    modelFile: 'de_DE-thorsten-low.with_runtime_opt.ort',
-  },
-}
-
-// Each voice extracts into its own root below this. prepareArchive() skips a directory
-// it has already filled, so sharing one across voices would let the first voice a device
-// staged block every other one.
-const ANDROID_TTS_EXTRACT_DIR = 'sherpa/tts'
 
 // Android echo cancellation: open the mic as voice-communication, paired with the
 // MODE_IN_COMMUNICATION route set by EdgeSpeechAudioSessionModule on start. The
@@ -110,8 +88,6 @@ class VoiceEngine {
     vadSensitivity: 0.5,
     sampleRate: 16000,
     bufferSize: 512,
-    ttsVoice: 'en_GB',
-    sttModel: 'whisper-base-en',
   }
 
   /** Resolved absolute path to the Whisper model on Android (see ensureAndroidModel). */
@@ -122,9 +98,6 @@ class VoiceEngine {
 
   /** filesDir root the TTS voice zip was extracted to (Android; see stageAndroidTtsVoice). */
   private androidTtsDir: string | null = null
-
-  /** The `ttsVoice` actually extracted there — fixed for the session, as on iOS. */
-  private androidTtsVoice: string | null = null
 
   /**
    * Android: bumped by every stopListening(). A start captures it before its first await
@@ -262,9 +235,8 @@ class VoiceEngine {
 
   /**
    * Android: copy/unzip the model files during init, so the first listen()/speak() is
-   * not stalled by them. Reads the configured sttModel/ttsVoice, so configure() must
-   * run first (EdgeSpeechProvider does). A failure here is left for
-   * prepareAndroidSession() to retry and report.
+   * not stalled by them. A failure here is left for prepareAndroidSession() to retry
+   * and report.
    */
   private async stageAndroidAssets(): Promise<void> {
     if (!this.isInitialized) {
@@ -333,11 +305,9 @@ class VoiceEngine {
   }
 
   /**
-   * Apply configuration. `sttModel` and `ttsVoice` select which model files to load,
-   * so they must be set before initialize() — that is what stages them on Android.
-   * Changing them later is ignored on both platforms. Configure once, at mount.
-   * (`vadSensitivity`, `sampleRate` and `bufferSize` are baked into the graph when the
-   * engine is created.)
+   * Apply configuration. All three values are baked into the graph when the engine is
+   * created, so a configure() after the first listen()/speak() is ignored. Configure
+   * once, at mount.
    */
   configure(config: Record<string, unknown>): void {
     if (typeof config.vadSensitivity === 'number') {
@@ -349,12 +319,6 @@ class VoiceEngine {
     if (typeof config.bufferSize === 'number') {
       this.config.bufferSize = config.bufferSize
     }
-    if (typeof config.ttsVoice === 'string') {
-      this.config.ttsVoice = config.ttsVoice
-    }
-    if (typeof config.sttModel === 'string' && config.sttModel.trim() !== '') {
-      this.config.sttModel = config.sttModel
-    }
   }
 
   /** Android: copy the Whisper model asset to filesDir (once) and cache its path. iOS no-op (bundled). */
@@ -365,13 +329,6 @@ class VoiceEngine {
     if (this.androidModelPath) {
       return
     }
-    const assetPath = ANDROID_MODEL_ASSETS[this.config.sttModel]
-    if (!assetPath) {
-      throw this.makeError(
-        'MODEL_UNAVAILABLE',
-        `Unknown sttModel '${this.config.sttModel}' on Android. Bundle it and add it to ANDROID_MODEL_ASSETS.`
-      )
-    }
     const models = NativeModules.EdgeSpeechModels
     if (!models?.prepareModel) {
       throw this.makeError(
@@ -380,22 +337,21 @@ class VoiceEngine {
       )
     }
     try {
-      this.androidModelPath = await models.prepareModel(assetPath)
+      this.androidModelPath = await models.prepareModel(ANDROID_WHISPER_MODEL_ASSET)
     } catch (e) {
-      // A known sttModel whose asset never made it into the APK: the app asked for a
-      // model outside the default download set. Separated from a genuine copy failure
-      // (no space, unreadable) because the fix is a build change, not a runtime one.
+      // The asset never made it into the APK — a build that stripped or never ran the
+      // model download. Separated from a genuine copy failure (no space, unreadable)
+      // because the fix is a build change, not a runtime one.
       if ((e as { code?: string })?.code === 'model_asset_missing') {
         throw this.makeError(
           'MODEL_UNAVAILABLE',
-          `sttModel '${this.config.sttModel}' is not bundled in this build. Add ` +
-            `'${assetPath.slice(ANDROID_MODEL_ASSET_ROOT.length)}' to the edgespeechModels ` +
-            `Gradle property and rebuild.`
+          `The Whisper model is missing from this build (expected asset ` +
+            `'${ANDROID_WHISPER_MODEL_ASSET}'). Rebuild so Gradle's downloadModels task runs.`
         )
       }
       throw this.makeError(
         'MODEL_LOAD_FAILED',
-        `Failed to prepare Whisper model '${assetPath}': ${(e as Error)?.message ?? String(e)}`
+        `Failed to prepare Whisper model '${ANDROID_WHISPER_MODEL_ASSET}': ${(e as Error)?.message ?? String(e)}`
       )
     }
   }
@@ -409,13 +365,6 @@ class VoiceEngine {
     if (Platform.OS !== 'android' || this.androidTtsLoaded || this.androidTtsDir) {
       return
     }
-    const voice = ANDROID_TTS_VOICES[this.config.ttsVoice]
-    if (!voice) {
-      throw this.makeError(
-        'TTS_VOICE_UNAVAILABLE',
-        `Unknown ttsVoice '${this.config.ttsVoice}' on Android. Bundle it and add it to ANDROID_TTS_VOICES.`
-      )
-    }
     const models = NativeModules.EdgeSpeechModels
     if (!models?.prepareArchive) {
       throw this.makeError(
@@ -425,16 +374,13 @@ class VoiceEngine {
     }
     try {
       this.androidTtsDir = await models.prepareArchive(
-        voice.zipAsset,
-        `${ANDROID_TTS_EXTRACT_DIR}/${this.config.ttsVoice}`
+        ANDROID_TTS_VOICE.zipAsset,
+        ANDROID_TTS_VOICE.extractDir
       )
-      // The staged voice is the one that plays for the rest of the session, whatever a
-      // later configure() says — the files for any other voice were never extracted.
-      this.androidTtsVoice = this.config.ttsVoice
     } catch (e) {
       throw this.makeError(
         'TTS_MODEL_LOAD_FAILED',
-        `Failed to extract TTS voice '${voice.zipAsset}': ${(e as Error)?.message ?? String(e)}`
+        `Failed to extract TTS voice '${ANDROID_TTS_VOICE.zipAsset}': ${(e as Error)?.message ?? String(e)}`
       )
     }
   }
@@ -448,16 +394,15 @@ class VoiceEngine {
     if (Platform.OS !== 'android' || this.androidTtsLoaded) {
       return
     }
-    const voice = this.androidTtsVoice ? ANDROID_TTS_VOICES[this.androidTtsVoice] : undefined
-    if (!voice || !this.androidTtsDir) {
+    if (!this.androidTtsDir) {
       throw this.makeError(
         'TTS_VOICE_UNAVAILABLE',
-        `TTS voice '${this.config.ttsVoice}' was not staged before speak().`
+        'The TTS voice was not staged before speak().'
       )
     }
-    const dir = `${this.androidTtsDir}/${voice.voiceDir}`
+    const dir = `${this.androidTtsDir}/${ANDROID_TTS_VOICE.voiceDir}`
     const res = this.ensureClient().callAction('ttsNode', 'loadModel', {
-      modelPath: `${dir}/${voice.modelFile}`,
+      modelPath: `${dir}/${ANDROID_TTS_VOICE.modelFile}`,
       tokensPath: `${dir}/tokens.txt`,
       dataPath: `${dir}/espeak-ng-data`,
     })
@@ -935,15 +880,12 @@ class VoiceEngine {
     this.androidModelPath = null
     this.androidTtsLoaded = false
     this.androidTtsDir = null
-    this.androidTtsVoice = null
     this.androidStopGeneration = 0
     this.androidInitPromise = null
     this.config = {
       vadSensitivity: 0.5,
       sampleRate: 16000,
       bufferSize: 512,
-      ttsVoice: 'en_GB',
-      sttModel: 'whisper-base-en',
     }
   }
 }

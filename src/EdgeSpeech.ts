@@ -85,24 +85,15 @@ class EdgeSpeechAPI {
       throw new Error('vadSensitivity must be between 0.0 and 1.0')
     }
 
-    if (config.sttModel !== undefined && config.sttModel.trim() === '') {
-      throw new Error('sttModel cannot be an empty string')
-    }
-
-    if (config.ttsVoice !== undefined && config.ttsVoice.trim() === '') {
-      throw new Error('ttsVoice cannot be an empty string')
-    }
 
     // Apply defaults
     const finalConfig = {
       appId: config.appId,
       appSecret: config.appSecret,
-      sttModel: config.sttModel || 'whisper-base-en',
-      ttsVoice: config.ttsVoice || 'en_GB',
       vadSensitivity: config.vadSensitivity ?? 0.5,
     }
 
-    // Configure first: initialize() stages the Android model files named by the config.
+    // Configure first: the graph initialize() builds is shaped by this config.
     SwitchboardVoiceModule.configure(finalConfig)
     // Deliberately not awaited: listen()/speak() wait for the Android staging
     // themselves, and a caller of configure() must be configured on return.

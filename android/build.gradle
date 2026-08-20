@@ -70,21 +70,15 @@ dependencies {
 // in), so they're fetched into this module's own assets and Android's asset merge
 // folds them into the consuming app's APK — no app-side setup, Expo or bare RN.
 //
-// Override the set with -PedgespeechModels=whisper/ggml-base.en.bin,... or an
-// `edgespeechModels` entry in gradle.properties. Keep in step with
-// ANDROID_MODEL_ASSETS / ANDROID_TTS_VOICES in src/VoiceEngine.ts.
+// One STT model and one TTS voice, matching what SwitchboardWhisper.framework and
+// SwitchboardSherpa.framework give iOS by default, so both platforms speak and hear
+// the same. Keep in step with ANDROID_WHISPER_MODEL_ASSET / ANDROID_TTS_VOICE in
+// src/VoiceEngine.ts.
 def modelBaseUrl = "https://switchboard-sdk-public.s3.amazonaws.com/assets/models"
-// Only the assets the default config can reach: the default STT model, plus the voice
-// EdgeSpeechProvider defaults to. A session loads a single model and a single voice, so bundling
-// the alternatives costs APK size nothing can use — apps setting a different `sttModel`
-// (whisper/ggml-tiny.en.bin) or `ttsVoice` (sherpa/tts/de_DE.zip) add those via edgespeechModels.
-def defaultModels = [
+def modelPaths = [
     "whisper/ggml-base.en.bin",
     "sherpa/tts/en_GB.zip",
 ]
-def modelPaths = (findProperty("edgespeechModels")?.toString()?.trim()
-    ? findProperty("edgespeechModels").toString().split(",").collect { it.trim() }.findAll { it }
-    : defaultModels)
 def modelsRoot = file("src/main/assets/models")
 
 def downloadModels = tasks.register("downloadModels") {

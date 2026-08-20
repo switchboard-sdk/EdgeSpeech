@@ -44,6 +44,9 @@ is a thin delegate over the Switchboard SDK's `SwitchboardJSONRPC`.
   engine; the cause still arrives via `onError` / the hook's `error`.
 - `stopListening()` and a `stopSpeaking()` with no listening session now emit `'ready'`
   (previously `'idle'`).
+- **One STT model and one TTS voice on both platforms.** Whisper `base.en` and the `en_GB` Piper
+  voice — the same ones the iOS frameworks bake in — are now fixed, so the two platforms behave
+  identically.
 
 ### Added
 
@@ -59,6 +62,12 @@ is a thin delegate over the Switchboard SDK's `SwitchboardJSONRPC`.
 ### Removed
 
 - `useEdgeSpeech().isInitializing` — replaced by `voiceState === 'initializing'`.
+- `sttModel` config option (`EdgeSpeechProvider` prop, `EdgeSpeech.configure()`, `VoiceConfig`).
+  It only ever did anything on Android; iOS ships `base.en` alone inside
+  `SwitchboardWhisper.framework`, with no CoreML encoder for any other model.
+- `ttsVoice` config option. Same asymmetry: `Sherpa.TTS` hardcodes English in its constructor, so
+  on iOS the value was silently ignored while on Android a typo threw `TTS_VOICE_UNAVAILABLE`.
+- `edgespeechModels` Gradle property — the model set is fixed, so there is nothing to override.
 
 ## [0.1.0] - TBD
 

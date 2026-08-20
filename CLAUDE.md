@@ -55,8 +55,6 @@ import { SwitchboardVoice } from 'switchboard-voice-rn'
 
 // Configuration
 SwitchboardVoice.configure({
-  sttModel: 'whisper-base-en',
-  ttsVoice: 'en_GB', // 'en_GB' | 'de_DE' — Android only, see TTS Voices below
   vadSensitivity: 0.5,
 })
 
@@ -223,26 +221,28 @@ The `speechEnded` event provides `start` and `end` timestamps that are automatic
 
 ### STT Models
 
+**One model, both platforms: Whisper `ggml-base.en.bin` (141 MB).** There is no `sttModel` option —
+the model is fixed in `ANDROID_WHISPER_MODEL_ASSET` (`src/VoiceEngine.ts`) and in the Gradle
+`modelPaths` list, which must stay in step.
+
 `Whisper.STT` picks its model one of two ways:
 
 - **Default** — the node resolves a bundled path in its constructor. On iOS that path is hardcoded
-  to `ggml-base.en.bin` inside `SwitchboardWhisper.framework` (`src/apple/ModelFile.mm`), so
-  `sttModel` cannot change it. The Android AARs bundle nothing, so there is no default there.
+  to `ggml-base.en.bin` inside `SwitchboardWhisper.framework` (`src/apple/ModelFile.mm`). The
+  Android AARs bundle nothing, so there is no default there.
 - **`loadModel` action** — `{ modelPath, useGPU }`, shared C++ (`WhisperSTTNode.cpp`), works on both
   platforms with any ggml `.bin` on disk. Android uses it for every session.
 
-Two English models are hosted at `…/assets/models/whisper/`: `ggml-base.en.bin` (141 MB) and
-`ggml-tiny.en.bin` (74 MB). Both are wired as `sttModel` values (`whisper-base-en`,
-`whisper-tiny-en`) in `ANDROID_MODEL_ASSETS`, but only base is in the Gradle `defaultModels` — tiny
-has to be opted into with `-PedgespeechModels=whisper/ggml-tiny.en.bin`, and asking for an
-unbundled model fails at `listen()` with `MODEL_UNAVAILABLE` (Kotlin rejects `prepareModel` with
-`model_asset_missing`).
+A second English model, `ggml-tiny.en.bin` (74 MB), is hosted at `…/assets/models/whisper/` and
+would decode faster at a real cost in accuracy. It is deliberately **not** wired up:
 
-**CoreML caveat if tiny is ever taken to iOS:** whisper.cpp on iOS is built with CoreML and derives
-its encoder path from the model path (`<model>-encoder.mlmodelc`). The framework ships
-`ggml-base.en-encoder.mlmodelc` but no tiny equivalent, and none is hosted — a side-loaded tiny.en
-would run without the CoreML encoder, so it could well be _slower_ than base.en despite being half
-the size.
+- **iOS cannot have it.** The framework ships `base.en` alone, and whisper.cpp on iOS is built with
+  CoreML and derives its encoder path from the model path (`<model>-encoder.mlmodelc`). The bundle
+  carries `ggml-base.en-encoder.mlmodelc` and no tiny equivalent, and none is hosted — a side-loaded
+  tiny.en would run without the CoreML encoder, so it could well be _slower_ than base.en despite
+  being half the size.
+- So offering it would be an Android-only option, which is exactly the platform divergence this
+  library is meant not to have.
 
 ### TTS Voices (IMPORTANT)
 
@@ -253,25 +253,26 @@ resolves to the `en_GB` Piper voice. Verified on device: passing `voice` as `en`
 `de_DE` or nonsense all produce `Unknown parameter: voice` and load `en_GB`.
 
 Two voices ship with the SDK, `en_GB` (`vits-piper-en_GB-southern_english_female-low`) and `de_DE`
-(`vits-piper-de_DE-thorsten-low`). The only way to select one is the **`loadModel` action**:
+(`vits-piper-de_DE-thorsten-low`), and the only way to pick one is the **`loadModel` action**:
 
 ```jsonc
-// callAction on ttsNode — this is how Android switches voices
+// callAction on ttsNode — Android's only route to a voice
 {
-  "modelPath": "<dir>/de_DE-thorsten-low.with_runtime_opt.ort",
+  "modelPath": "<dir>/en_GB-southern_english_female-low.with_runtime_opt.ort",
   "tokensPath": "<dir>/tokens.txt",
   "dataPath": "<dir>/espeak-ng-data",
 }
 ```
 
 - **Android** must use it regardless: the AARs bundle no models, so the voice is downloaded into
-  assets, unzipped to `filesDir`, and loaded by path.
+  assets, unzipped to `filesDir`, and loaded by path (`ANDROID_TTS_VOICE` in `src/VoiceEngine.ts`).
 - **iOS** does not: the voices live inside `SwitchboardSherpa.framework/files/<locale>/…` and the
-  node auto-loads `en_GB`. So `ttsVoice` is Android-only today.
+  node auto-loads `en_GB`.
 
-Note the vocabulary mismatch if this is ever wired up: the SDK's internal language codes are
-two-letter (`"en"`, `"de"`), while the directories and our public `ttsVoice` values are locale names
-(`en_GB`, `de_DE`).
+**`en_GB` only, and there is no `ttsVoice` option.** `de_DE` was selectable on Android and
+unreachable on iOS, so exposing it meant an API that silently did nothing on one platform. If it is
+ever revisited, note the vocabulary mismatch: the SDK's internal language codes are two-letter
+(`"en"`, `"de"`) while the directories are locale names (`en_GB`, `de_DE`).
 
 ## Implementation Phases
 

@@ -55,24 +55,12 @@ describe('EdgeSpeech', () => {
       const config: VoiceConfig = {
         appId: 'test-id',
         appSecret: 'test-secret',
-        sttModel: 'whisper-base-en',
-        ttsVoice: 'de_DE',
         vadSensitivity: 0.7,
       }
 
       await expect(EdgeSpeech.configure(config)).resolves.toBeUndefined()
       expect(SwitchboardVoiceModule.configure).toHaveBeenCalledWith(
-        expect.objectContaining({ ttsVoice: 'de_DE', sttModel: 'whisper-base-en' })
-      )
-    })
-
-    it('defaults to a voice the engine actually has', async () => {
-      // Must be a key of ANDROID_TTS_VOICES, or Android throws TTS_VOICE_UNAVAILABLE on
-      // the first speak(). iOS ignores ttsVoice entirely, so only Android reveals a typo.
-      await EdgeSpeech.configure({ appId: 'test-id', appSecret: 'test-secret' })
-
-      expect(SwitchboardVoiceModule.configure).toHaveBeenCalledWith(
-        expect.objectContaining({ ttsVoice: 'en_GB' })
+        expect.objectContaining({ vadSensitivity: 0.7 })
       )
     })
 
@@ -100,25 +88,6 @@ describe('EdgeSpeech', () => {
       )
     })
 
-    it('should reject empty sttModel string', async () => {
-      const config: VoiceConfig = {
-        appId: 'test-id',
-        appSecret: 'test-secret',
-        sttModel: '   ',
-      }
-
-      await expect(EdgeSpeech.configure(config)).rejects.toThrow('sttModel cannot be an empty string')
-    })
-
-    it('should reject empty ttsVoice string', async () => {
-      const config: VoiceConfig = {
-        appId: 'test-id',
-        appSecret: 'test-secret',
-        ttsVoice: '',
-      }
-
-      await expect(EdgeSpeech.configure(config)).rejects.toThrow('ttsVoice cannot be an empty string')
-    })
   })
 
   describe('listen()', () => {

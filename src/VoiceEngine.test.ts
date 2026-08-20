@@ -536,28 +536,14 @@ describe('VoiceEngine Android platform branches', () => {
     await voiceEngine.speak('hello')
     const loadsBefore = countAction('loadModel')
 
-    // Configure-once by design: the nodes load their models when the engine is
-    // built, so a later change must not half-apply (new path resolved, node still
-    // on the old model). Nothing reloads, and nothing is re-resolved.
-    voiceEngine.configure({ sttModel: 'whisper-tiny-en', ttsVoice: 'de_DE' })
+    // Configure-once by design: the graph is built from the config, so a later change
+    // must not half-apply. Nothing reloads, and nothing is re-resolved.
+    voiceEngine.configure({ vadSensitivity: 0.9, sampleRate: 48000 })
     await voiceEngine.speak('again')
 
     expect(countAction('loadModel')).toBe(loadsBefore)
     expect(prepareModel).toHaveBeenCalledTimes(1)
     expect(prepareArchive).toHaveBeenCalledTimes(1)
-  })
-
-  it('keeps the voice staged at initialize() when configure() changes it later', async () => {
-    RN.Platform.OS = 'android'
-    // Fixed for the session, as on iOS: only the staged voice's files exist on disk, so
-    // honouring the change would point loadModel at files that were never extracted.
-    await voiceEngine.initialize('app-id', 'app-secret')
-    voiceEngine.configure({ ttsVoice: 'de_DE' })
-    await voiceEngine.speak('hallo')
-
-    expect(prepareArchive).toHaveBeenCalledTimes(1)
-    expect(prepareArchive).toHaveBeenCalledWith('models/sherpa/tts/en_GB.zip', 'sherpa/tts/en_GB')
-    expect(ttsLoadCall()!.params.params.modelPath).toContain('en_GB-southern_english_female-low')
   })
 
   it('discards the engine when Whisper loadModel fails, so a retry reloads it', async () => {
@@ -662,44 +648,19 @@ describe('VoiceEngine Android platform branches', () => {
     expect(countAction('stop')).toBe(0)
   })
 
-  it('rejects an unknown sttModel, without opening the mic', async () => {
+  it('reports a build whose Whisper asset never got downloaded', async () => {
     RN.Platform.OS = 'android'
-    voiceEngine.initialize('app-id', 'app-secret')
-    // Only the models with an asset mapping resolve, so asking for another fails
-    // loudly rather than silently using base.
-    voiceEngine.configure({ sttModel: 'whisper-small-en' })
-
-    await expect(voiceEngine.listen()).rejects.toMatchObject({ code: 'MODEL_UNAVAILABLE' })
-    expect(prepareModel).not.toHaveBeenCalled()
-    expect(findAction('start')).toBeUndefined()
-  })
-
-  it('stages and loads the tiny model when sttModel selects it', async () => {
-    RN.Platform.OS = 'android'
-    const tinyPath = `${FILES_DIR}/models/whisper/ggml-tiny.en.bin`
-    prepareModel.mockResolvedValue(tinyPath)
-    voiceEngine.configure({ sttModel: 'whisper-tiny-en' })
-    voiceEngine.initialize('app-id', 'app-secret')
-    await voiceEngine.listen()
-
-    expect(prepareModel).toHaveBeenCalledWith('models/whisper/ggml-tiny.en.bin')
-    expect(findAction('loadModel')!.params.params.modelPath).toBe(tinyPath)
-  })
-
-  it('reports a known sttModel whose asset was left out of the build', async () => {
-    RN.Platform.OS = 'android'
-    // The default Gradle download set carries base only, so a build that never opted
-    // tiny in has no such asset. The fix is a build change — say so, and say how.
+    // Gradle's downloadModels task puts the model in the library's assets; a build that
+    // skipped it has none. The fix is a build change — say so, and say which asset.
     const missing = Object.assign(new Error('Model asset is not bundled in this build.'), {
       code: 'model_asset_missing',
     })
     prepareModel.mockRejectedValue(missing)
-    voiceEngine.configure({ sttModel: 'whisper-tiny-en' })
     voiceEngine.initialize('app-id', 'app-secret')
 
     await expect(voiceEngine.listen()).rejects.toMatchObject({
       code: 'MODEL_UNAVAILABLE',
-      message: expect.stringContaining('edgespeechModels'),
+      message: expect.stringContaining('models/whisper/ggml-base.en.bin'),
     })
     expect(findAction('start')).toBeUndefined()
   })
@@ -835,16 +796,6 @@ describe('VoiceEngine Android platform branches', () => {
     )
     expect(load.params.params.tokensPath).toBe(`${ttsRoot('en_GB')}/${v}/tokens.txt`)
     expect(load.params.params.dataPath).toBe(`${ttsRoot('en_GB')}/${v}/espeak-ng-data`)
-  })
-
-  it('selects the de_DE voice zip when ttsVoice is de_DE', async () => {
-    RN.Platform.OS = 'android'
-    voiceEngine.initialize('app-id', 'app-secret')
-    voiceEngine.configure({ ttsVoice: 'de_DE' })
-    await voiceEngine.speak('hallo')
-
-    expect(prepareArchive).toHaveBeenCalledWith('models/sherpa/tts/de_DE.zip', 'sherpa/tts/de_DE')
-    expect(ttsLoadCall()!.params.params.modelPath).toContain('de_DE-thorsten-low.with_runtime_opt.ort')
   })
 
   it('does not load a TTS voice on iOS', async () => {

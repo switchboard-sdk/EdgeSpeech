@@ -16,8 +16,6 @@ const EdgeSpeechContext = createContext<EdgeSpeechContextValue | null>(null)
 export interface EdgeSpeechProviderProps {
   appId: string
   appSecret: string
-  sttModel?: string
-  ttsVoice?: string
   vadSensitivity?: number
   sampleRate?: number
   bufferSize?: number
@@ -25,16 +23,12 @@ export interface EdgeSpeechProviderProps {
 }
 
 const defaultConfig = {
-  sttModel: 'whisper-base-en',
-  ttsVoice: 'en_GB',
   vadSensitivity: 0.5,
 }
 
 export function EdgeSpeechProvider({
   appId,
   appSecret,
-  sttModel,
-  ttsVoice,
   vadSensitivity,
   sampleRate,
   bufferSize,
@@ -49,24 +43,16 @@ export function EdgeSpeechProvider({
   if (vadSensitivity !== undefined && (vadSensitivity < 0.0 || vadSensitivity > 1.0)) {
     throw new Error('EdgeSpeechProvider: vadSensitivity must be between 0.0 and 1.0')
   }
-  if (sttModel !== undefined && sttModel.trim() === '') {
-    throw new Error('EdgeSpeechProvider: sttModel cannot be an empty string')
-  }
-  if (ttsVoice !== undefined && ttsVoice.trim() === '') {
-    throw new Error('EdgeSpeechProvider: ttsVoice cannot be an empty string')
-  }
 
-  // Runs before the initialize() effect below, which stages the model files this
-  // config names.
+  // Runs before the initialize() effect below, which builds the graph this config
+  // shapes.
   useEffect(() => {
     SwitchboardVoiceModule.configure({
-      sttModel: sttModel ?? defaultConfig.sttModel,
-      ttsVoice: ttsVoice ?? defaultConfig.ttsVoice,
       vadSensitivity: vadSensitivity ?? defaultConfig.vadSensitivity,
       ...(sampleRate !== undefined && { sampleRate }),
       ...(bufferSize !== undefined && { bufferSize }),
     })
-  }, [sttModel, ttsVoice, vadSensitivity, sampleRate, bufferSize])
+  }, [vadSensitivity, sampleRate, bufferSize])
 
   useEffect(() => {
     // Init reports its own progress through onStateChange ('initializing' → 'ready'),
