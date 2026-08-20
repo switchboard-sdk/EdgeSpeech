@@ -27,9 +27,15 @@ class EdgeSpeechModelsModule(private val reactContext: ReactApplicationContext) 
    * Init the SDK via Kotlin so it registers its PlatformInfoProvider from the Context
    * — that's what gives Whisper the native-lib dir for its ggml backends (the C++
    * JSON-RPC init has no Context). Requires extractNativeLibs=true.
+   *
+   * Idempotent per process, which is what makes a JS reload survivable: see [sdkInitialized].
    */
   @ReactMethod
   fun initializeSdk(appId: String, appSecret: String, extensionsJson: String, promise: Promise) {
+    if (sdkInitialized) {
+      promise.resolve(null)
+      return
+    }
     try {
       val extObj = JSONObject(extensionsJson)
       val extensions = HashMap<String, Any>()
@@ -39,8 +45,10 @@ class EdgeSpeechModelsModule(private val reactContext: ReactApplicationContext) 
         extensions[key] = emptyMap<String, Any>()
       }
       val result = Switchboard.initialize(reactContext.applicationContext, appId, appSecret, extensions)
-      // Treat "already initialized" (JS bundle reloads) as success.
+      // The message check is belt and braces, for an SDK initialized by some other path
+      // in this process; the flag above is what actually covers a reload.
       if (result.isSuccess || result.error?.contains("already", ignoreCase = true) == true) {
+        sdkInitialized = true
         promise.resolve(null)
       } else {
         promise.reject("init_failed", result.error ?: "Switchboard SDK initialize failed")
@@ -173,6 +181,22 @@ class EdgeSpeechModelsModule(private val reactContext: ReactApplicationContext) 
 
   companion object {
     const val NAME = "EdgeSpeechModels"
+
+    /**
+     * Whether this *process* has already initialized the SDK.
+     *
+     * The SDK is a process-global singleton with no way to be asked whether it is up, and
+     * it survives a JS reload — which creates a fresh JS context that calls
+     * initializeSdk() again. That second call fails, and on 3.2.x it fails with the
+     * generic "SDK initialization failed" rather than anything mentioning "already", so it
+     * used to be reported as a real credentials failure and left the engine dead until the
+     * app was force-stopped.
+     *
+     * Static, so its lifetime matches the singleton it describes: native module instances
+     * are recreated by a reload, this is not.
+     */
+    @Volatile
+    private var sdkInitialized = false
 
     // Where the models live inside the APK, and where their files sit once extracted.
     // Kept in step with android/build.gradle's download list; the JS side never sees
