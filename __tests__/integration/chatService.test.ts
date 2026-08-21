@@ -1,16 +1,38 @@
 /**
  * Integration test for chatService.
- * Hits the real LLM API — run with: npm run test:integration
+ * Hits the real Switchboard chat proxy — run with: npm run test:integration
+ *
+ * Requires SWITCHBOARD_APP_ID and SWITCHBOARD_APP_SECRET for an app that has chat
+ * enabled. Skipped when they are absent.
  */
 
-import { sendToChat } from '../../example/services/chatService'
+import { sendToChat, configureChat } from '../../example/services/chatService'
 
-describe('chatService (integration)', () => {
+// Read via globalThis so this file needs no @types/node.
+const env =
+  (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env ?? {}
+
+const appId = env.SWITCHBOARD_APP_ID
+const appSecret = env.SWITCHBOARD_APP_SECRET
+// Optional API host override; defaults to production.
+const apiBaseUrl = env.SWITCHBOARD_API_URL
+
+const describeIfConfigured = appId && appSecret ? describe : describe.skip
+
+describeIfConfigured('chatService (integration)', () => {
+  beforeAll(() => {
+    configureChat({
+      appId: appId as string,
+      appSecret: appSecret as string,
+      apiBaseUrl,
+    })
+  })
+
   it('returns a non-empty string response', async () => {
     const response = await sendToChat('Reply with only the word yes.', [])
     expect(typeof response).toBe('string')
     expect(response.length).toBeGreaterThan(0)
-  }, 30_000)
+  }, 60_000)
 
   it('accepts conversation history without error', async () => {
     const history = [
@@ -20,5 +42,5 @@ describe('chatService (integration)', () => {
     const response = await sendToChat('What did I just tell you?', history)
     expect(typeof response).toBe('string')
     expect(response.length).toBeGreaterThan(0)
-  }, 30_000)
+  }, 60_000)
 })

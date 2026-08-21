@@ -10,6 +10,18 @@ Runs on **iOS and Android**.
 > so `expo run:*` creates them on first use. EdgeSpeech ships native code, so it needs a development
 > build — it does **not** run in Expo Go.
 
+## Conversation Mode's LLM
+
+Everything but the LLM turn runs on-device. For that turn, `services/chatService.ts` sends the
+transcript to the Switchboard API, which proxies it to the model provider and returns the reply, so
+no provider API key is shipped in the app and you don't need to supply one — the App ID and App
+Secret the SDK is initialised with are the only credentials involved. To use your own backend
+instead, replace `chatService.ts`; `sendToChat(message, history)` is the only contract the app
+depends on.
+
+> [!WARNING]
+> The demo credentials in `.env.example` come with a limited amount of chat credits.
+
 ## Prerequisites
 
 - Node.js 20+
