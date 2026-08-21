@@ -21,7 +21,7 @@ target_include_directories(react-native-edgespeech PUBLIC "${EDGESPEECH_CPP_DIR}
 
 # Switchboard SDK + extensions via Prefab. The AAR Prefab package names are
 # SwitchboardSDK / SwitchboardOnnx / SwitchboardSileroVAD / SwitchboardWhisper /
-# SwitchboardSherpa (verified from the 3.2.3 AARs).
+# SwitchboardSherpa (verified from the 3.2.5 AARs).
 find_package(SwitchboardSDK REQUIRED CONFIG)
 find_package(SwitchboardOnnx REQUIRED CONFIG)
 find_package(SwitchboardSileroVAD REQUIRED CONFIG)

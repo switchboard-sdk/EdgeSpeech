@@ -14,7 +14,7 @@ def safeExtGet(prop, fallback) {
 }
 
 // Must match the iOS framework version vendored via edgespeech.podspec.
-def switchboardSdkVersion = "3.2.3"
+def switchboardSdkVersion = "3.2.5"
 
 // The app declares the Maven repo and Prefab itself (bare RN via the README's
 // Android setup snippet, Expo via app.plugin.js). We don't inject them from here:
