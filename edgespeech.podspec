@@ -2,6 +2,13 @@ require 'json'
 
 package = JSON.parse(File.read(File.join(__dir__, 'package.json')))
 
+# Fetch the Switchboard xcframeworks. Duplicates s.prepare_command below, which CocoaPods
+# skips for a path pod on an incremental install — leaving the frameworks missing after
+# `rm -rf node_modules && npm install`. Evaluation always runs; the script is idempotent.
+system('bash', File.join(__dir__, 'scripts', 'download-ios-frameworks.sh')) or
+  raise 'EdgeSpeech: could not download the Switchboard iOS frameworks — check your ' \
+        'network connection and re-run pod install'
+
 Pod::Spec.new do |s|
   s.name         = "edgespeech"
   s.version      = package['version']
@@ -18,18 +25,22 @@ Pod::Spec.new do |s|
   # Privacy manifest — required for App Store submissions (Apple policy, May 2024+)
   s.resource_bundles = { 'edgespeech_privacy' => ['ios/PrivacyInfo.xcprivacy'] }
 
-  # Switchboard SDK + extension xcframeworks — downloaded into ios/Frameworks/ by
-  # scripts/postinstall.js. Whisper ships under a Release/ subdir with extra libs
-  # (whisper.xcframework etc.), auto-discovered below.
-  whisper_lib_frameworks = Dir[File.join(__dir__, 'ios/Frameworks/SwitchboardWhisper/ios/Release/lib/*.xcframework')].map { |f| f.sub("#{__dir__}/", '') }
+  # The documented hook, normally a no-op after the call above. Keeps the binaries out of
+  # git and out of the npm tarball.
+  s.prepare_command = 'bash scripts/download-ios-frameworks.sh'
 
+  # Link the downloaded xcframeworks (each carries the C++ headers we compile
+  # against). Whisper nests everything under Release/, plus an extra
+  # whisper.xcframework under Release/lib/. Explicit paths, not a glob: a partial
+  # download then fails loudly.
   s.vendored_frameworks = [
     'ios/Frameworks/SwitchboardSDK/ios/SwitchboardSDK.xcframework',
     'ios/Frameworks/SwitchboardWhisper/ios/Release/SwitchboardWhisper.xcframework',
+    'ios/Frameworks/SwitchboardWhisper/ios/Release/lib/whisper.xcframework',
     'ios/Frameworks/SwitchboardSileroVAD/ios/SwitchboardSileroVAD.xcframework',
     'ios/Frameworks/SwitchboardOnnx/ios/SwitchboardOnnx.xcframework',
     'ios/Frameworks/SwitchboardSherpa/ios/SwitchboardSherpa.xcframework',
-  ] + whisper_lib_frameworks
+  ]
 
   # C++ headers we compile against live in each package's include/ dir (Whisper's
   # under Release/include). These carry SwitchboardJSONRPC.hpp + the *Extension.hpp

@@ -3,6 +3,7 @@ import SwitchboardVoiceModule from './SwitchboardVoiceModule'
 
 export interface EdgeSpeechContextValue {
   addListener: typeof SwitchboardVoiceModule.addListener
+  getState: typeof SwitchboardVoiceModule.getState
   listen: () => Promise<void>
   stopListening: () => Promise<void>
   speak: (text: string) => Promise<void>
@@ -15,8 +16,6 @@ const EdgeSpeechContext = createContext<EdgeSpeechContextValue | null>(null)
 export interface EdgeSpeechProviderProps {
   appId: string
   appSecret: string
-  sttModel?: string
-  ttsVoice?: string
   vadSensitivity?: number
   sampleRate?: number
   bufferSize?: number
@@ -24,16 +23,12 @@ export interface EdgeSpeechProviderProps {
 }
 
 const defaultConfig = {
-  sttModel: 'whisper-base-en',
-  ttsVoice: 'en_GB',
   vadSensitivity: 0.5,
 }
 
 export function EdgeSpeechProvider({
   appId,
   appSecret,
-  sttModel,
-  ttsVoice,
   vadSensitivity,
   sampleRate,
   bufferSize,
@@ -48,14 +43,20 @@ export function EdgeSpeechProvider({
   if (vadSensitivity !== undefined && (vadSensitivity < 0.0 || vadSensitivity > 1.0)) {
     throw new Error('EdgeSpeechProvider: vadSensitivity must be between 0.0 and 1.0')
   }
-  if (sttModel !== undefined && sttModel.trim() === '') {
-    throw new Error('EdgeSpeechProvider: sttModel cannot be an empty string')
-  }
-  if (ttsVoice !== undefined && ttsVoice.trim() === '') {
-    throw new Error('EdgeSpeechProvider: ttsVoice cannot be an empty string')
-  }
+
+  // Runs before the initialize() effect below, which builds the graph this config
+  // shapes.
+  useEffect(() => {
+    SwitchboardVoiceModule.configure({
+      vadSensitivity: vadSensitivity ?? defaultConfig.vadSensitivity,
+      ...(sampleRate !== undefined && { sampleRate }),
+      ...(bufferSize !== undefined && { bufferSize }),
+    })
+  }, [vadSensitivity, sampleRate, bufferSize])
 
   useEffect(() => {
+    // Init reports its own progress through onStateChange ('initializing' → 'ready'),
+    // so there is nothing to do with the promise here.
     SwitchboardVoiceModule.initialize(appId, appSecret)
 
     return () => {
@@ -63,19 +64,10 @@ export function EdgeSpeechProvider({
     }
   }, [appId, appSecret])
 
-  useEffect(() => {
-    SwitchboardVoiceModule.configure({
-      sttModel: sttModel ?? defaultConfig.sttModel,
-      ttsVoice: ttsVoice ?? defaultConfig.ttsVoice,
-      vadSensitivity: vadSensitivity ?? defaultConfig.vadSensitivity,
-      ...(sampleRate !== undefined && { sampleRate }),
-      ...(bufferSize !== undefined && { bufferSize }),
-    })
-  }, [sttModel, ttsVoice, vadSensitivity, sampleRate, bufferSize])
-
   const value: EdgeSpeechContextValue = {
     // Keep NativeModule method bound to avoid losing JSI `this` context.
     addListener: SwitchboardVoiceModule.addListener.bind(SwitchboardVoiceModule),
+    getState: SwitchboardVoiceModule.getState.bind(SwitchboardVoiceModule),
     listen: () => SwitchboardVoiceModule.listen(),
     stopListening: () => SwitchboardVoiceModule.stopListening(),
     speak: (text) => SwitchboardVoiceModule.speak(text),

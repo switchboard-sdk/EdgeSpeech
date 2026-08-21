@@ -11,7 +11,8 @@ jest.mock('../src/SwitchboardVoiceModule', () => ({
   __esModule: true,
   default: {
     addListener: jest.fn(() => ({ remove: jest.fn() })),
-    initialize: jest.fn(),
+    getState: jest.fn(() => 'ready'),
+    initialize: jest.fn(() => Promise.resolve()),
     configure: jest.fn(),
     listen: jest.fn(() => Promise.resolve()),
     stopListening: jest.fn(() => Promise.resolve()),
@@ -41,11 +42,7 @@ describe('EdgeSpeechProvider', () => {
     renderHook(() => useEdgeSpeechContext(), { wrapper })
 
     expect(SwitchboardVoiceModule.configure).toHaveBeenCalledWith(
-      expect.objectContaining({
-        sttModel: 'whisper-base-en',
-        ttsVoice: 'en_GB',
-        vadSensitivity: 0.5,
-      })
+      expect.objectContaining({ vadSensitivity: 0.5 })
     )
   })
 
@@ -53,14 +50,14 @@ describe('EdgeSpeechProvider', () => {
     const customWrapper = ({ children }: { children: React.ReactNode }) =>
       React.createElement(
         EdgeSpeechProvider,
-        { appId: 'test-id', appSecret: 'test-secret', vadSensitivity: 0.8, ttsVoice: 'en_US' },
+        { appId: 'test-id', appSecret: 'test-secret', vadSensitivity: 0.8 },
         children
       )
 
     renderHook(() => useEdgeSpeechContext(), { wrapper: customWrapper })
 
     expect(SwitchboardVoiceModule.configure).toHaveBeenCalledWith(
-      expect.objectContaining({ vadSensitivity: 0.8, ttsVoice: 'en_US' })
+      expect.objectContaining({ vadSensitivity: 0.8 })
     )
   })
 
@@ -161,29 +158,6 @@ describe('EdgeSpeechProvider', () => {
       )
     })
 
-    it('throws when sttModel is an empty string', () => {
-      const badWrapper = ({ children }: { children: React.ReactNode }) =>
-        React.createElement(
-          EdgeSpeechProvider,
-          { appId: 'test-id', appSecret: 'test-secret', sttModel: '  ' },
-          children
-        )
-      expect(() => renderHook(() => useEdgeSpeechContext(), { wrapper: badWrapper })).toThrow(
-        'EdgeSpeechProvider: sttModel cannot be an empty string'
-      )
-    })
-
-    it('throws when ttsVoice is an empty string', () => {
-      const badWrapper = ({ children }: { children: React.ReactNode }) =>
-        React.createElement(
-          EdgeSpeechProvider,
-          { appId: 'test-id', appSecret: 'test-secret', ttsVoice: '' },
-          children
-        )
-      expect(() => renderHook(() => useEdgeSpeechContext(), { wrapper: badWrapper })).toThrow(
-        'EdgeSpeechProvider: ttsVoice cannot be an empty string'
-      )
-    })
   })
 
   describe('exposed methods delegate to native module', () => {

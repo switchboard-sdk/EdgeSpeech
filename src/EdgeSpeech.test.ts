@@ -1,4 +1,5 @@
 import { EdgeSpeech } from './EdgeSpeech'
+import SwitchboardVoiceModule from './SwitchboardVoiceModule'
 import type { VoiceConfig } from './types'
 
 // Mock the SwitchboardVoiceModule façade directly — it wraps the native TurboModule
@@ -54,12 +55,13 @@ describe('EdgeSpeech', () => {
       const config: VoiceConfig = {
         appId: 'test-id',
         appSecret: 'test-secret',
-        sttModel: 'whisper-base-en',
-        ttsVoice: 'silero-en-us',
         vadSensitivity: 0.7,
       }
 
       await expect(EdgeSpeech.configure(config)).resolves.toBeUndefined()
+      expect(SwitchboardVoiceModule.configure).toHaveBeenCalledWith(
+        expect.objectContaining({ vadSensitivity: 0.7 })
+      )
     })
 
     it('should validate vadSensitivity range (above 1.0)', async () => {
@@ -86,25 +88,6 @@ describe('EdgeSpeech', () => {
       )
     })
 
-    it('should reject empty sttModel string', async () => {
-      const config: VoiceConfig = {
-        appId: 'test-id',
-        appSecret: 'test-secret',
-        sttModel: '   ',
-      }
-
-      await expect(EdgeSpeech.configure(config)).rejects.toThrow('sttModel cannot be an empty string')
-    })
-
-    it('should reject empty ttsVoice string', async () => {
-      const config: VoiceConfig = {
-        appId: 'test-id',
-        appSecret: 'test-secret',
-        ttsVoice: '',
-      }
-
-      await expect(EdgeSpeech.configure(config)).rejects.toThrow('ttsVoice cannot be an empty string')
-    })
   })
 
   describe('listen()', () => {

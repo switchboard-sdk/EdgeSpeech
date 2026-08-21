@@ -1,7 +1,18 @@
 /**
- * Voice processing states
+ * Voice processing states.
+ *
+ * Three of these describe the SDK's lifecycle rather than the audio pipeline:
+ *
+ * - `idle` — the SDK is not up: either `initialize()` has not run yet, or it ran and
+ *   failed. `onError` (and the hook's `error`) says which. `listen()`/`speak()` reject
+ *   with `NOT_INITIALIZED` from here.
+ * - `initializing` — init is in flight. On Android that includes staging the STT/TTS
+ *   model files, which takes seconds. A `listen()`/`speak()` issued now waits for it
+ *   rather than failing, so gating your UI on this state is a courtesy, not a duty.
+ * - `ready` — initialized, nothing running. This is the state that means "operable",
+ *   not `idle`.
  */
-export type VoiceState = 'idle' | 'listening' | 'processing' | 'speaking'
+export type VoiceState = 'idle' | 'initializing' | 'ready' | 'listening' | 'processing' | 'speaking'
 
 /**
  * Configuration for SwitchboardVoice
@@ -12,12 +23,6 @@ export interface VoiceConfig {
 
   /** Switchboard app secret (required) */
   appSecret: string
-
-  /** STT model to use (optional, default: 'whisper-base-en') */
-  sttModel?: string
-
-  /** TTS voice to use (optional, default: 'silero-en-us') */
-  ttsVoice?: string
 
   /** VAD sensitivity (0.0-1.0, default: 0.5) */
   vadSensitivity?: number

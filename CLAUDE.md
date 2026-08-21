@@ -45,7 +45,7 @@ Voice AI developers work entirely in text. The library handles all audio complex
 
 - On-device VAD (Voice Activity Detection)
 - On-device STT (Speech-to-Text via Whisper)
-- On-device TTS (Text-to-Speech via Silero)
+- On-device TTS (Text-to-Speech via Sherpa/sherpa-onnx)
 - Simple JavaScript callbacks and methods
 
 ## Target API
@@ -55,8 +55,6 @@ import { SwitchboardVoice } from 'switchboard-voice-rn'
 
 // Configuration
 SwitchboardVoice.configure({
-  sttModel: 'whisper-base-en',
-  ttsVoice: 'silero-en-us',
   vadSensitivity: 0.5,
 })
 
@@ -146,25 +144,25 @@ Native iOS example showing VAD + Whisper STT pipeline. Key patterns:
 
 ### Node Types (SDK 3.1.0)
 
-| Extension   | Node Type       | Action                                |
-| ----------- | --------------- | ------------------------------------- |
-| SileroVAD   | `SileroVAD.VAD` | -                                     |
-| Whisper STT | `Whisper.STT`   | `transcribe` (params: `start`, `end`) |
-| Sherpa TTS  | `Sherpa.TTS`    | `synthesize` (param: `text`)          |
+| Extension   | Node Type     | Action                                |
+| ----------- | ------------- | ------------------------------------- |
+| SileroVAD   | `Silero.VAD`  | -                                     |
+| Whisper STT | `Whisper.STT` | `transcribe` (params: `start`, `end`) |
+| Sherpa TTS  | `Sherpa.TTS`  | `synthesize` (param: `text`)          |
 
 Note: Engine type is `"Realtime"` (not `"RealTimeGraphRenderer"`).
 
 ### Event Names (IMPORTANT)
 
-For `SileroVAD.VAD` node:
+For `Silero.VAD` node:
 
 - **Events**: `speechStarted`, `speechEnded` (NOT `start`/`end`)
 - **Data connection format**: `vadNode.speechEnded` → `sttNode.transcribe`
 
 For `Whisper.STT` node:
 
-- **Events**: `transcription` (returns transcript text)
-- **Actions**: `transcribe` (params: `start`, `end` sample positions from VAD)
+- **Events**: `transcribed` (returns transcript text), plus `modelLoaded` / `modelLoadFailed`
+- **Actions**: `transcribe` (params: `start`, `end` sample positions from VAD), `loadModel`
 
 The `speechEnded` event provides `start` and `end` timestamps that are automatically passed to the STT `transcribe` action via the data connection.
 
@@ -183,7 +181,7 @@ The `speechEnded` event provides `start` and `end` timestamps that are automatic
       "nodes": [
         { "id": "multiChannelToMonoNode", "type": "MultiChannelToMono" },
         { "id": "busSplitterNode", "type": "BusSplitter" },
-        { "id": "vadNode", "type": "SileroVAD.VAD", "config": { "minSilenceDurationMs": 100 } },
+        { "id": "vadNode", "type": "Silero.VAD", "config": { "minSilenceDurationMs": 100 } },
         {
           "id": "sttNode",
           "type": "Whisper.STT",
@@ -214,12 +212,67 @@ The `speechEnded` event provides `start` and `end` timestamps that are automatic
         "sampleRate": 16000,
         "bufferSize": 512
       },
-      "nodes": [{ "id": "ttsNode", "type": "Sherpa.TTS", "config": { "voice": "en_GB" } }],
+      "nodes": [{ "id": "ttsNode", "type": "Sherpa.TTS" }],
       "connections": [{ "sourceNode": "ttsNode", "destinationNode": "outputNode" }]
     }
   }
 }
 ```
+
+### STT Models
+
+**One model, both platforms: Whisper `ggml-base.en.bin` (141 MB).** There is no `sttModel` option —
+the model is fixed in `ANDROID_WHISPER_MODEL_ASSET` (`src/VoiceEngine.ts`) and in the Gradle
+`modelPaths` list, which must stay in step.
+
+`Whisper.STT` picks its model one of two ways:
+
+- **Default** — the node resolves a bundled path in its constructor. On iOS that path is hardcoded
+  to `ggml-base.en.bin` inside `SwitchboardWhisper.framework` (`src/apple/ModelFile.mm`). The
+  Android AARs bundle nothing, so there is no default there.
+- **`loadModel` action** — `{ modelPath, useGPU }`, shared C++ (`WhisperSTTNode.cpp`), works on both
+  platforms with any ggml `.bin` on disk. Android uses it for every session.
+
+A second English model, `ggml-tiny.en.bin` (74 MB), is hosted at `…/assets/models/whisper/` and
+would decode faster at a real cost in accuracy. It is deliberately **not** wired up:
+
+- **iOS cannot have it.** The framework ships `base.en` alone, and whisper.cpp on iOS is built with
+  CoreML and derives its encoder path from the model path (`<model>-encoder.mlmodelc`). The bundle
+  carries `ggml-base.en-encoder.mlmodelc` and no tiny equivalent, and none is hosted — a side-loaded
+  tiny.en would run without the CoreML encoder, so it could well be _slower_ than base.en despite
+  being half the size.
+- So offering it would be an Android-only option, which is exactly the platform divergence this
+  library is meant not to have.
+
+### TTS Voices (IMPORTANT)
+
+`Sherpa.TTS` takes **no voice config**. Its only accepted config key is `text`; anything else logs
+`Unknown parameter: <key>`. The language is fixed to `"en"` in the node's constructor
+(`SherpaTTSNode(const SBAnyMap& config) : internals { make_unique<Internals>(this, "en") }`), which
+resolves to the `en_GB` Piper voice. Verified on device: passing `voice` as `en`, `de`, `en_GB`,
+`de_DE` or nonsense all produce `Unknown parameter: voice` and load `en_GB`.
+
+Two voices ship with the SDK, `en_GB` (`vits-piper-en_GB-southern_english_female-low`) and `de_DE`
+(`vits-piper-de_DE-thorsten-low`), and the only way to pick one is the **`loadModel` action**:
+
+```jsonc
+// callAction on ttsNode — Android's only route to a voice
+{
+  "modelPath": "<dir>/en_GB-southern_english_female-low.with_runtime_opt.ort",
+  "tokensPath": "<dir>/tokens.txt",
+  "dataPath": "<dir>/espeak-ng-data",
+}
+```
+
+- **Android** must use it regardless: the AARs bundle no models, so the voice is downloaded into
+  assets, unzipped to `filesDir`, and loaded by path (`ANDROID_TTS_VOICE` in `src/VoiceEngine.ts`).
+- **iOS** does not: the voices live inside `SwitchboardSherpa.framework/files/<locale>/…` and the
+  node auto-loads `en_GB`.
+
+**`en_GB` only, and there is no `ttsVoice` option.** `de_DE` was selectable on Android and
+unreachable on iOS, so exposing it meant an API that silently did nothing on one platform. If it is
+ever revisited, note the vocabulary mismatch: the SDK's internal language codes are two-letter
+(`"en"`, `"de"`) while the directories are locale names (`en_GB`, `de_DE`).
 
 ## Implementation Phases
 
@@ -292,18 +345,27 @@ Default: Queue sequential `speak()` calls. Play in order.
 ### iOS Extensions Required
 
 - SwitchboardSDK (core)
+- SwitchboardOnnx (ONNX runtime, underpins Silero VAD)
+- SwitchboardSileroVAD (VAD — VAD only, there is no Silero TTS)
 - SwitchboardWhisper (STT)
-- SwitchboardSileroVAD (VAD)
-- SwitchboardSilero (TTS) - verify extension name
+- SwitchboardSherpa (TTS)
+
+These are the five packages `scripts/download-ios-frameworks.sh` downloads into `ios/Frameworks/`,
+run automatically by the podspec's `prepare_command` during `pod install`.
 
 ### Initialization
 
-```swift
-SBSwitchboardSDK.initialize(withAppID: "YOUR_APP_ID", appSecret: "YOUR_APP_SECRET")
-SBWhisperExtension.initialize(withConfig: [:])
-SBSileroVADExtension.initialize(withConfig: [:])
-// + TTS extension init
+Extensions are initialized by name through the SDK's `initialize` action, not per-extension Swift
+calls. The keys are the names the C++ extensions register — note `Silero`, not `SileroVAD`:
+
+```ts
+const EXTENSIONS = { Onnx: {}, Silero: {}, Whisper: {}, Sherpa: {} }
+client.callAction('switchboard', 'initialize', { appID, appSecret, extensions: EXTENSIONS })
 ```
+
+On Android the same init must go through Kotlin (`Switchboard.initialize(context, …)`) so the SDK
+registers its `PlatformInfoProvider` from the `Context` — that is what gives Whisper the native-lib
+directory for its ggml backends.
 
 ## Development Practices
 

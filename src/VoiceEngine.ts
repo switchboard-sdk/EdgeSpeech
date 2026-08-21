@@ -1,6 +1,9 @@
+import { Platform } from 'react-native'
 import NativeEdgeSpeech from './NativeEdgeSpeech'
 import { NativeModuleRPCClient } from './NativeModuleRPCClient'
 import { SwitchboardClient } from './SwitchboardClient'
+import { AndroidSession, ANDROID_INPUT_PRESET } from './AndroidSession'
+import { makeError } from './errors'
 import type { VoiceState, TranscriptEvent, StateChangeEvent, ErrorEvent } from './types'
 
 /**
@@ -32,14 +35,13 @@ interface VoiceEngineConfig {
   vadSensitivity: number
   sampleRate: number
   bufferSize: number
-  ttsVoice: string
 }
 
 /**
  * The on-device voice pipeline, authored entirely in TypeScript over the
  * Switchboard JSON-RPC channel. This is the TypeScript port of the old native
  * `AudioGraphManager.swift`: it builds the combined VAD → STT + TTS graph,
- * creates the engine, runs the idle/listening/speaking state machine, handles
+ * creates the engine, runs the ready/listening/speaking state machine, handles
  * barge-in, and translates raw SDK events into EdgeSpeech's public events.
  *
  * A single combined engine (microphone + speaker) keeps VoiceProcessingIO (AEC)
@@ -53,14 +55,60 @@ class VoiceEngine {
   private isSpeaking = false
   private eventsWired = false
 
+  /**
+   * The state last emitted via onStateChange. Starts at 'idle' — the SDK is not up
+   * until initialize() has run, and a failed init returns here (see settleInit()).
+   * 'ready' is the initialized-and-waiting state.
+   */
+  private state: VoiceState = 'idle'
+
+  /** Why the last initialize() failed, if it did — folded into NOT_INITIALIZED rejections. */
+  private initFailureReason: string | null = null
+
   private config: VoiceEngineConfig = {
     vadSensitivity: 0.5,
     sampleRate: 16000,
     bufferSize: 512,
-    ttsVoice: 'en_GB',
   }
 
+  /** Android's staging/route/permission work; null on iOS, which has none of it. */
+  private androidSession: AndroidSession | null = null
+
+  /**
+   * Whether the current engine's ttsNode has been given a voice (Android loads it by
+   * path; iOS auto-loads its own). Per engine, so destroyEngine() clears it.
+   */
+  private ttsVoiceLoaded = false
+
+  /**
+   * Init still in flight. A second initialize() hands it back rather than reporting the
+   * init settled, and a start issued during it waits on it (see awaitInit).
+   */
+  private pendingInit: Promise<void> | null = null
+
   private readonly listeners = new Map<EdgeSpeechEventName, Set<Listener>>()
+
+  /**
+   * Android's session, or null on iOS. Built on first use, and dropped by `_cleanup()`,
+   * which is what lets a test flip `Platform.OS` between cases — in an app the platform
+   * never changes, so this resolves exactly once.
+   */
+  private get android(): AndroidSession | null {
+    if (!this.androidSession && Platform.OS === 'android') {
+      this.androidSession = new AndroidSession()
+    }
+    return this.androidSession
+  }
+
+  // MARK: - Public state API
+
+  /**
+   * The current state, for consumers that mount after an onStateChange they missed —
+   * `useEdgeSpeech` seeds its `voiceState` from this.
+   */
+  get currentState(): VoiceState {
+    return this.state
+  }
 
   // MARK: - Public listener API (mirrors the old Expo NativeModule.addListener)
 
@@ -83,40 +131,124 @@ class VoiceEngine {
 
   // MARK: - Lifecycle
 
-  initialize(appId: string, appSecret: string): void {
+  /**
+   * Start the SDK. The returned promise resolves once initialization has settled — on
+   * Android that includes the Kotlin init and the model staging — and never rejects: a
+   * credentials failure goes to onError and leaves the engine uninitialized, so the next
+   * listen()/speak() rejects instead.
+   *
+   * Deliberately not `async`: a broken native module is a setup error and must keep
+   * throwing synchronously, rather than becoming an unhandled rejection in the callers
+   * that ignore the promise (EdgeSpeechProvider's effect, EdgeSpeech.configure()).
+   */
+  initialize(appId: string, appSecret: string): Promise<void> {
     if (this.isInitialized) {
-      return
+      // Hand back an init already in flight rather than reporting it as settled.
+      return this.pendingInit ?? Promise.resolve()
     }
-    const client = this.ensureClient()
+    this.ensureClient()
     this.wireEvents()
+    this.initFailureReason = null
+    // Announced on every attempt: a retry after a failed init starts from 'idle'.
+    this.setState('initializing')
 
-    const res = client.callAction('switchboard', 'initialize', {
+    const android = this.android
+    if (android) {
+      // The flag is optimistic: a listen()/speak() issued while the models stage waits
+      // on pendingInit rather than rejecting. Set before the chain, since a failure
+      // clears it.
+      this.isInitialized = true
+      this.pendingInit = android
+        .initialize(appId, appSecret, EXTENSIONS, (message) => this.failInitialization(message))
+        // No-ops after a failure, which already settled the state to 'idle'.
+        .then(() => this.settleInit('ready'))
+        // Nothing above rejects today. Belt and braces: an unhandled rejection here would
+        // also strand the state on 'initializing', since settleInit() would never run.
+        .catch((e) => this.failInitialization((e as Error)?.message ?? String(e)))
+      return this.pendingInit
+    }
+
+    const res = this.ensureClient().callAction('switchboard', 'initialize', {
       appID: appId,
       appSecret,
       extensions: EXTENSIONS,
     })
     if (res.error) {
       const message = res.error.message ?? ''
-      // The native SDK is a process-global singleton that survives JS bundle
-      // reloads (Fast Refresh / dev reopen); a repeat initialize then reports
-      // "already been initialized". Treat that as success so the app doesn't
-      // red-box on reload.
-      // NOTE (stopgap): matching on the error text is brittle — a stable error
-      // code or an SDK init-state query would be more robust.
-      if (/already.*initialized/i.test(message)) {
-        this.isInitialized = true
-        return
+      // The native SDK is a process-global singleton that survives JS bundle reloads
+      // (Fast Refresh / dev reopen); a repeat initialize then reports "already been
+      // initialized". Treat that as success so the app doesn't red-box on reload.
+      // NOTE (stopgap): matching on the error text is brittle — a stable error code or
+      // an SDK init-state query would be more robust.
+      if (!/already.*initialized/i.test(message)) {
+        // Surface genuine failures via onError and stay uninitialized (a later
+        // listen()/speak() then rejects NOT_INITIALIZED). Don't throw:
+        // EdgeSpeechProvider calls initialize() inside an effect, so throwing would
+        // red-box the app instead of firing onError — matches the original module.
+        this.failInitialization(message)
+        return Promise.resolve()
       }
-      // Surface genuine failures via onError and stay uninitialized (a later
-      // listen()/speak() then rejects NOT_INITIALIZED). Don't throw:
-      // EdgeSpeechProvider calls initialize() inside an effect, so throwing would
-      // red-box the app instead of firing onError — matches the original module.
-      this.emitError('INIT_FAILED', message)
-      return
     }
     this.isInitialized = true
+    this.settleInit('ready')
+    return Promise.resolve()
   }
 
+  /**
+   * Block until initialization has settled, then reject if it didn't succeed.
+   * initialize() is deliberately not async (EdgeSpeechProvider calls it from an effect
+   * and ignores the promise) so it can't report the outcome itself — this is the first
+   * point where a caller can be told, and it runs before anything touches the engine.
+   */
+  private async awaitInit(): Promise<void> {
+    await this.pendingInit
+    if (!this.isInitialized) {
+      throw this.notInitializedError()
+    }
+  }
+
+  /**
+   * Mark initialization as failed: record the cause, drop back to uninitialized so
+   * a later initialize() can retry, and surface it via onError.
+   */
+  private failInitialization(message: string): void {
+    this.isInitialized = false
+    this.initFailureReason = message
+    this.settleInit('idle')
+    this.emitError('INIT_FAILED', message)
+  }
+
+  /**
+   * Leave 'initializing' once init has settled: 'ready' when the SDK came up, 'idle'
+   * when it didn't — the cause is reported through onError, not by parking the state
+   * machine on a spinner.
+   *
+   * The 'initializing' guard is load-bearing, not just de-duplication. On Android a
+   * failure settles to 'idle' mid-chain via failInitialization(), and the tail of that
+   * same chain calls here again with 'ready'; without the guard that tail would claim
+   * a dead SDK is operable. It also protects a state reached while init was in flight.
+   */
+  private settleInit(next: 'ready' | 'idle'): void {
+    if (this.state === 'initializing') {
+      this.setState(next)
+    }
+  }
+
+  /** NOT_INITIALIZED, naming the underlying init failure when there was one. */
+  private notInitializedError(): Error {
+    return this.makeError(
+      'NOT_INITIALIZED',
+      this.initFailureReason
+        ? `Switchboard SDK not initialized: ${this.initFailureReason}`
+        : 'Switchboard SDK not initialized. Call initialize() first.'
+    )
+  }
+
+  /**
+   * Apply configuration. All three values are baked into the graph when the engine is
+   * created, so a configure() after the first listen()/speak() is ignored. Configure
+   * once, at mount.
+   */
   configure(config: Record<string, unknown>): void {
     if (typeof config.vadSensitivity === 'number') {
       this.config.vadSensitivity = Math.max(0, Math.min(1, config.vadSensitivity))
@@ -127,23 +259,53 @@ class VoiceEngine {
     if (typeof config.bufferSize === 'number') {
       this.config.bufferSize = config.bufferSize
     }
-    if (typeof config.ttsVoice === 'string') {
-      this.config.ttsVoice = config.ttsVoice
-    }
   }
 
   // MARK: - Control
 
-  async listen(): Promise<void> {
-    if (!this.isInitialized) {
-      throw this.makeError('NOT_INITIALIZED', 'Switchboard SDK not initialized. Call initialize() first.')
-    }
-    if (!this.engineId) {
-      this.createEngine()
-    }
-    if (this.isListening) {
+  /**
+   * Undo a start that threw after prep entered the communication route. stopListening()
+   * cannot help there — it early-returns while isListening is false — so the app would
+   * be left in MODE_IN_COMMUNICATION with no way back. A session that is still running
+   * keeps the route, which it needs. Only platforms with session prep have anything to
+   * give back — iOS leaves a failed start's engine in place to retry, as it always has.
+   */
+  private rollbackFailedStart(): void {
+    if (!this.android || this.isListening || this.isSpeaking) {
       return
     }
+    if (this.engineId) {
+      this.destroyEngine() // gives the route back too
+    } else {
+      this.android.releaseRoute()
+    }
+  }
+
+  /**
+   * Android: hand the staged voice to the ttsNode. Synchronous (a plain callAction), so
+   * speak() can do it without suspending. Runs again after destroyEngine(), which leaves
+   * a fresh, unloaded ttsNode behind. No-op on iOS.
+   */
+  private loadTtsVoice(): void {
+    if (!this.android || this.ttsVoiceLoaded) {
+      return
+    }
+    const paths = this.android.ttsVoicePaths
+    if (!paths) {
+      throw this.makeError('TTS_VOICE_UNAVAILABLE', 'The TTS voice was not staged before speak().')
+    }
+    const res = this.ensureClient().callAction('ttsNode', 'loadModel', paths)
+    if (res.error) {
+      throw this.makeError(
+        'TTS_MODEL_LOAD_FAILED',
+        `Sherpa TTS loadModel failed: ${res.error.message}`
+      )
+    }
+    this.ttsVoiceLoaded = true
+  }
+
+  /** Start the engine. Synchronous — any audio route was entered during prep. */
+  private startEngineSync(): void {
     const res = this.ensureClient().callAction(this.engineId!, 'start', {})
     if (res.error) {
       throw this.makeError('LISTEN_FAILED', res.error.message)
@@ -152,7 +314,34 @@ class VoiceEngine {
     this.setState('listening')
   }
 
+  async listen(): Promise<void> {
+    if (!this.isInitialized) {
+      throw this.notInitializedError()
+    }
+    if (this.android && (await this.android.prepareSession(false, () => this.awaitInit()))) {
+      return
+    }
+
+    // No `await` past this line: JS runs an await-free stretch to completion, which is
+    // what stops a double tap from starting the engine twice. iOS never suspends above.
+    try {
+      if (!this.engineId) {
+        this.createEngine()
+      }
+      if (this.isListening) {
+        return
+      }
+      this.startEngineSync()
+    } catch (e) {
+      this.rollbackFailedStart()
+      throw e
+    }
+  }
+
   async stopListening(): Promise<void> {
+    // Cancel any start still in its async prep — including when there is also a live
+    // session to stop below, since that prep would otherwise reopen the mic.
+    this.android?.cancelPendingStarts()
     if (!this.engineId || !this.isListening) {
       return
     }
@@ -162,30 +351,39 @@ class VoiceEngine {
     }
     this.isListening = false
     this.isSpeaking = false
-    this.setState('idle')
+    this.android?.releaseRoute()
+    this.setState('ready')
   }
 
   async speak(text: string): Promise<void> {
     if (!this.isInitialized) {
-      throw this.makeError('NOT_INITIALIZED', 'Switchboard SDK not initialized. Call initialize() first.')
+      throw this.notInitializedError()
     }
     if (!text) {
       return
     }
-    if (!this.engineId) {
-      this.createEngine()
-    }
-    // Starting the engine also activates the mic + AEC needed for barge-in.
-    if (!this.isListening) {
-      const startRes = this.ensureClient().callAction(this.engineId!, 'start', {})
-      if (startRes.error) {
-        throw this.makeError('LISTEN_FAILED', startRes.error.message)
-      }
-      this.isListening = true
-      this.setState('listening')
+    if (this.android && (await this.android.prepareSession(true, () => this.awaitInit()))) {
+      return
     }
 
-    const res = this.ensureClient().callAction('ttsNode', 'synthesize', { text })
+    // No `await` past this line — see listen().
+    let res
+    try {
+      if (!this.engineId) {
+        this.createEngine()
+      }
+      // Lazily on first speak: Android loads the staged voice, iOS auto-loads its own.
+      this.loadTtsVoice()
+      // Starting the engine also activates the mic + AEC needed for barge-in.
+      if (!this.isListening) {
+        this.startEngineSync()
+      }
+
+      res = this.ensureClient().callAction('ttsNode', 'synthesize', { text })
+    } catch (e) {
+      this.rollbackFailedStart()
+      throw e
+    }
     if (res.error) {
       throw this.makeError('SPEAK_FAILED', res.error.message)
     }
@@ -201,11 +399,13 @@ class VoiceEngine {
     // isSpeaking) does not fire onTTSComplete after an explicit cancellation.
     this.isSpeaking = false
     this.ensureClient().callAction('ttsNode', 'stop', {})
-    this.setState(this.isListening ? 'listening' : 'idle')
+    this.setState(this.isListening ? 'listening' : 'ready')
   }
 
   async requestMicrophonePermission(): Promise<boolean> {
-    const granted = await NativeEdgeSpeech.requestMicrophonePermission()
+    const granted = this.android
+      ? await this.android.requestMicrophonePermission()
+      : await NativeEdgeSpeech.requestMicrophonePermission()
     if (!granted) {
       // Match the original module: reject on denial. The useEdgeSpeech hook
       // catches this and surfaces the message as `error`.
@@ -229,10 +429,38 @@ class VoiceEngine {
     }
     this.engineId = res.result
 
-    // Enable VoiceProcessingIO (AEC). Must be set after creation via setValue —
-    // with one combined engine this keeps AEC active during TTS playback and
-    // prevents self-triggered barge-in.
-    client.setValue(this.engineId, 'voiceProcessingEnabled', true)
+    // Past this point engineId is set, so a throw would leave a half-built engine that
+    // the next listen() reuses — skipping createEngine(), and with it the model load.
+    // Discard it instead: a retry then builds and loads a fresh one.
+    try {
+      // iOS: enable VoiceProcessingIO (AEC). Must be set after creation via setValue —
+      // with one combined engine this keeps AEC active during TTS playback and
+      // prevents self-triggered barge-in. The key does not exist in the Android SDK,
+      // where AEC comes from the input preset + communication route instead (see
+      // AndroidSession).
+      client.setValue(this.engineId, 'voiceProcessingEnabled', true)
+
+      // Android loads the Whisper model by path; iOS auto-loads its bundled one.
+      if (this.android) {
+        const modelPath = this.android.sttModelPath
+        if (!modelPath) {
+          throw this.makeError(
+            'MODEL_UNAVAILABLE',
+            'Whisper model path was not resolved before engine creation (call listen()/speak()).'
+          )
+        }
+        const loadRes = client.callAction('sttNode', 'loadModel', { modelPath, useGPU: false })
+        if (loadRes.error) {
+          throw this.makeError(
+            'MODEL_LOAD_FAILED',
+            `Whisper loadModel failed: ${loadRes.error.message}`
+          )
+        }
+      }
+    } catch (e) {
+      this.destroyEngine()
+      throw e
+    }
   }
 
   private destroyEngine(): void {
@@ -243,6 +471,9 @@ class VoiceEngine {
     this.engineId = null
     this.isListening = false
     this.isSpeaking = false
+    this.android?.releaseRoute()
+    // A new engine has a fresh, unloaded ttsNode — reload the voice on next speak.
+    this.ttsVoiceLoaded = false
   }
 
   /**
@@ -254,14 +485,18 @@ class VoiceEngine {
    *   data: vadNode.speechEnded → sttNode.transcribe
    */
   private buildGraphConfig(): object {
-    // Whisper's Metal GPU path crashes in the iOS Simulator, so gate on it.
-    const useGPU = !NativeEdgeSpeech.isSimulator()
+    const isAndroid = !!this.android
+    // GPU off in the iOS Simulator (Metal crash) and on Android (no Metal; CPU only).
+    const useGPU = !isAndroid && !NativeEdgeSpeech.isSimulator()
 
     return {
       type: 'Realtime',
       config: {
         microphoneEnabled: true,
         speakerEnabled: true,
+        // Android only: an Oboe stream parameter, so it must be set at creation —
+        // there is no iOS equivalent (VoiceProcessingIO covers it there).
+        ...(isAndroid ? { inputPreset: ANDROID_INPUT_PRESET } : {}),
         graph: {
           config: {
             sampleRate: this.config.sampleRate,
@@ -282,7 +517,10 @@ class VoiceEngine {
             {
               id: 'sttNode',
               type: 'Whisper.STT',
-              config: { initializeModel: true, useGPU },
+              // iOS auto-initializes the model bundled in the SDK framework. Android
+              // has none to auto-initialize, so the key is left off there
+              // and createEngine() loads it by path instead (sttNode.loadModel).
+              config: { useGPU, ...(isAndroid ? {} : { initializeModel: true }) },
             },
             { id: 'ttsNode', type: 'Sherpa.TTS' },
             { id: 'monoToMultiChannelNode', type: 'MonoToMultiChannel' },
@@ -339,6 +577,10 @@ class VoiceEngine {
     if (node === 'sttNode' && name === 'transcribed') {
       const text = this.extractText(e)
       if (text == null) {
+        // Nothing decoded — still leave 'processing', or the UI sticks on it.
+        if (this.isListening && !this.isSpeaking) {
+          this.setState('listening')
+        }
         return
       }
       if (this.isSpeaking) {
@@ -349,12 +591,21 @@ class VoiceEngine {
         this.ensureClient().callAction('ttsNode', 'stop', {})
         this.setState('listening')
         this.emit('onInterrupted', undefined)
+      } else if (this.isListening) {
+        // Leave 'processing' before the transcript, not after: consumers call speak()
+        // from onTranscriptComplete, and that sets 'speaking'.
+        this.setState('listening')
       }
       this.emit('onTranscript', { text, isFinal: true })
     } else if (node === 'vadNode' && name === 'speechStarted') {
       this.emit('onSpeechStart', undefined)
     } else if (node === 'vadNode' && name === 'speechEnded') {
       this.emit('onSpeechEnd', undefined)
+      // Whisper decodes from here until 'transcribed'. Not during TTS: that window
+      // belongs to 'speaking', and a barge-in transcript reports itself.
+      if (this.isListening && !this.isSpeaking) {
+        this.setState('processing')
+      }
     } else if (node === 'ttsNode' && name === 'finished') {
       if (!this.isSpeaking) {
         return
@@ -381,6 +632,7 @@ class VoiceEngine {
   }
 
   private setState(state: VoiceState): void {
+    this.state = state
     this.emit('onStateChange', { state })
   }
 
@@ -399,9 +651,7 @@ class VoiceEngine {
    * not additionally emit onError for action failures.
    */
   private makeError(code: string, message: string): Error {
-    const error = new Error(message)
-    ;(error as { code?: string }).code = code
-    return error
+    return makeError(code, message)
   }
 
   /**
@@ -416,7 +666,17 @@ class VoiceEngine {
     this.isListening = false
     this.isSpeaking = false
     this.eventsWired = false
-    this.config = { vadSensitivity: 0.5, sampleRate: 16000, bufferSize: 512, ttsVoice: 'en_GB' }
+    this.state = 'idle'
+    this.initFailureReason = null
+    this.pendingInit = null
+    this.ttsVoiceLoaded = false
+    // Dropped rather than reset, so the next use re-reads the platform (see `android`).
+    this.androidSession = null
+    this.config = {
+      vadSensitivity: 0.5,
+      sampleRate: 16000,
+      bufferSize: 512,
+    }
   }
 }
 

@@ -6,6 +6,7 @@
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
+    "plugins": ["@synervoz/edgespeech"],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.switchboard.voiceexample",

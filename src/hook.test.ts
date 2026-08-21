@@ -11,7 +11,8 @@ jest.mock('../src/SwitchboardVoiceModule', () => ({
   __esModule: true,
   default: {
     addListener: jest.fn(),
-    initialize: jest.fn(),
+    getState: jest.fn(() => 'ready'),
+    initialize: jest.fn(() => Promise.resolve()),
     configure: jest.fn(),
     listen: jest.fn(() => Promise.resolve()),
     stopListening: jest.fn(() => Promise.resolve()),
@@ -146,9 +147,9 @@ describe('useEdgeSpeech', () => {
   })
 
   describe('voiceState', () => {
-    it('starts as idle', () => {
+    it('starts from whatever the engine reports', () => {
       const { result } = renderHook(() => useEdgeSpeech(), { wrapper })
-      expect(result.current.voiceState).toBe('idle')
+      expect(result.current.voiceState).toBe('ready')
     })
 
     it('updates when onStateChange fires', () => {
@@ -180,9 +181,9 @@ describe('useEdgeSpeech', () => {
       expect(result.current.voiceState).toBe('speaking')
 
       act(() => {
-        fireNativeEvent('onStateChange', { state: 'idle' })
+        fireNativeEvent('onStateChange', { state: 'ready' })
       })
-      expect(result.current.voiceState).toBe('idle')
+      expect(result.current.voiceState).toBe('ready')
     })
   })
 
@@ -347,6 +348,32 @@ describe('useEdgeSpeech', () => {
         await result.current.requestMicrophonePermission()
       })
       expect(result.current.hasMicrophonePermission).toBe(true)
+    })
+  })
+
+  describe('initializing state', () => {
+    afterEach(() => {
+      // clearAllMocks() keeps implementations, so restore the default for later suites.
+      jest.mocked(SwitchboardVoiceModule.getState).mockReturnValue('ready')
+    })
+
+    it("seeds voiceState from the engine, so a mid-init mount reads 'initializing'", () => {
+      jest.mocked(SwitchboardVoiceModule.getState).mockReturnValue('initializing')
+
+      const { result } = renderHook(() => useEdgeSpeech(), { wrapper })
+
+      expect(result.current.voiceState).toBe('initializing')
+    })
+
+    it("leaves initializing for 'ready' when the engine settles", () => {
+      jest.mocked(SwitchboardVoiceModule.getState).mockReturnValue('initializing')
+      const { result } = renderHook(() => useEdgeSpeech(), { wrapper })
+
+      act(() => {
+        fireNativeEvent('onStateChange', { state: 'ready' })
+      })
+
+      expect(result.current.voiceState).toBe('ready')
     })
   })
 })
