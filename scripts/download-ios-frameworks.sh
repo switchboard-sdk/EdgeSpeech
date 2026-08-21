@@ -14,9 +14,14 @@
 #
 # Whisper is the exception: its zip nests everything under Release/, with an
 # extra whisper.xcframework under Release/lib/.
+#
+# Note on the zip names: up to 3.2.4 they were <Package>.zip; from 3.2.5 they are
+# <Package>-ios-<version>.zip. Only the file names changed — the extracted layout
+# above is identical, so the podspec's paths are unaffected. If a version bump
+# 404s here, check the naming scheme in the bucket first.
 set -euo pipefail
 
-SDK_VERSION="3.2.3"
+SDK_VERSION="3.2.5"
 BASE_URL="https://switchboard-sdk-public.s3.amazonaws.com/builds/release/${SDK_VERSION}/ios"
 
 PACKAGES=(SwitchboardSDK SwitchboardOnnx SwitchboardSileroVAD SwitchboardWhisper SwitchboardSherpa)
@@ -45,7 +50,7 @@ for pkg in "${PACKAGES[@]}"; do
   echo "↓ Downloading ${pkg} (${SDK_VERSION})"
   mkdir -p "${dest}"
   tmp_zip="${dest}/${pkg}.zip"
-  curl -fsSL "${BASE_URL}/${pkg}.zip" -o "${tmp_zip}"
+  curl -fsSL "${BASE_URL}/${pkg}-ios-${SDK_VERSION}.zip" -o "${tmp_zip}"
 
   echo "  Extracting ${pkg}"
   unzip -oq "${tmp_zip}" -d "${dest}"
