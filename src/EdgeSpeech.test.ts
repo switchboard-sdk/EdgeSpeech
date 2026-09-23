@@ -1,5 +1,6 @@
 import { EdgeSpeech } from './EdgeSpeech'
 import SwitchboardVoiceModule from './SwitchboardVoiceModule'
+import { DEFAULT_APP_ID, DEFAULT_APP_SECRET } from './credentials'
 import type { VoiceConfig } from './types'
 
 // Mock the SwitchboardVoiceModule façade directly — it wraps the native TurboModule
@@ -26,20 +27,33 @@ describe('EdgeSpeech', () => {
   })
 
   describe('configure()', () => {
-    it('should throw error if appId is missing', async () => {
-      const config = {
-        appSecret: 'test-secret',
-      } as VoiceConfig
+    it('falls back to the library credentials when none are given', async () => {
+      await expect(EdgeSpeech.configure()).resolves.toBeUndefined()
 
-      await expect(EdgeSpeech.configure(config)).rejects.toThrow('appId is required')
+      expect(SwitchboardVoiceModule.initialize).toHaveBeenCalledWith(
+        DEFAULT_APP_ID,
+        DEFAULT_APP_SECRET
+      )
     })
 
-    it('should throw error if appSecret is missing', async () => {
-      const config = {
-        appId: 'test-id',
-      } as VoiceConfig
+    it('falls back to the library credentials when they are blank', async () => {
+      await expect(EdgeSpeech.configure({ appId: '  ', appSecret: '' })).resolves.toBeUndefined()
 
-      await expect(EdgeSpeech.configure(config)).rejects.toThrow('appSecret is required')
+      expect(SwitchboardVoiceModule.initialize).toHaveBeenCalledWith(
+        DEFAULT_APP_ID,
+        DEFAULT_APP_SECRET
+      )
+    })
+
+    it('prefers supplied credentials over the library defaults', async () => {
+      const config: VoiceConfig = {
+        appId: 'test-id',
+        appSecret: 'test-secret',
+      }
+
+      await EdgeSpeech.configure(config)
+
+      expect(SwitchboardVoiceModule.initialize).toHaveBeenCalledWith('test-id', 'test-secret')
     })
 
     it('should accept valid configuration', async () => {
@@ -87,7 +101,6 @@ describe('EdgeSpeech', () => {
         'vadSensitivity must be between 0.0 and 1.0'
       )
     })
-
   })
 
   describe('listen()', () => {

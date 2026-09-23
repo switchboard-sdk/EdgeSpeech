@@ -6,6 +6,7 @@ import {
   type EdgeSpeechProviderProps,
 } from './EdgeSpeechProvider'
 import SwitchboardVoiceModule from './SwitchboardVoiceModule'
+import { DEFAULT_APP_ID, DEFAULT_APP_SECRET } from './credentials'
 
 jest.mock('../src/SwitchboardVoiceModule', () => ({
   __esModule: true,
@@ -98,39 +99,25 @@ describe('EdgeSpeechProvider', () => {
   })
 
   describe('prop validation', () => {
-    it('throws when appId is empty', () => {
-      const badWrapper = ({ children }: { children: React.ReactNode }) =>
-        React.createElement(
-          EdgeSpeechProvider,
-          { appId: '', appSecret: 'test-secret' },
-          children
-        )
-      expect(() => renderHook(() => useEdgeSpeechContext(), { wrapper: badWrapper })).toThrow(
-        'EdgeSpeechProvider: appId is required'
+    it('falls back to the library credentials when none are given', () => {
+      const noCredsWrapper = ({ children }: { children: React.ReactNode }) =>
+        React.createElement(EdgeSpeechProvider, {}, children)
+      renderHook(() => useEdgeSpeechContext(), { wrapper: noCredsWrapper })
+
+      expect(SwitchboardVoiceModule.initialize).toHaveBeenCalledWith(
+        DEFAULT_APP_ID,
+        DEFAULT_APP_SECRET
       )
     })
 
-    it('throws when appId is whitespace only', () => {
-      const badWrapper = ({ children }: { children: React.ReactNode }) =>
-        React.createElement(
-          EdgeSpeechProvider,
-          { appId: '   ', appSecret: 'test-secret' },
-          children
-        )
-      expect(() => renderHook(() => useEdgeSpeechContext(), { wrapper: badWrapper })).toThrow(
-        'EdgeSpeechProvider: appId is required'
-      )
-    })
+    it('falls back to the library credentials when they are blank', () => {
+      const blankCredsWrapper = ({ children }: { children: React.ReactNode }) =>
+        React.createElement(EdgeSpeechProvider, { appId: '   ', appSecret: '' }, children)
+      renderHook(() => useEdgeSpeechContext(), { wrapper: blankCredsWrapper })
 
-    it('throws when appSecret is empty', () => {
-      const badWrapper = ({ children }: { children: React.ReactNode }) =>
-        React.createElement(
-          EdgeSpeechProvider,
-          { appId: 'test-id', appSecret: '' },
-          children
-        )
-      expect(() => renderHook(() => useEdgeSpeechContext(), { wrapper: badWrapper })).toThrow(
-        'EdgeSpeechProvider: appSecret is required'
+      expect(SwitchboardVoiceModule.initialize).toHaveBeenCalledWith(
+        DEFAULT_APP_ID,
+        DEFAULT_APP_SECRET
       )
     })
 
@@ -157,7 +144,6 @@ describe('EdgeSpeechProvider', () => {
         'EdgeSpeechProvider: vadSensitivity must be between 0.0 and 1.0'
       )
     })
-
   })
 
   describe('exposed methods delegate to native module', () => {

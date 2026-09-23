@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, type ReactNode } from 'react'
+import { resolveCredentials } from './credentials'
 import SwitchboardVoiceModule from './SwitchboardVoiceModule'
 
 export interface EdgeSpeechContextValue {
@@ -14,8 +15,10 @@ export interface EdgeSpeechContextValue {
 const EdgeSpeechContext = createContext<EdgeSpeechContextValue | null>(null)
 
 export interface EdgeSpeechProviderProps {
-  appId: string
-  appSecret: string
+  /** Switchboard app ID (optional — the library has default credentials) */
+  appId?: string
+  /** Switchboard app secret (optional — the library has default credentials) */
+  appSecret?: string
   vadSensitivity?: number
   sampleRate?: number
   bufferSize?: number
@@ -34,12 +37,6 @@ export function EdgeSpeechProvider({
   bufferSize,
   children,
 }: EdgeSpeechProviderProps) {
-  if (!appId || appId.trim() === '') {
-    throw new Error('EdgeSpeechProvider: appId is required')
-  }
-  if (!appSecret || appSecret.trim() === '') {
-    throw new Error('EdgeSpeechProvider: appSecret is required')
-  }
   if (vadSensitivity !== undefined && (vadSensitivity < 0.0 || vadSensitivity > 1.0)) {
     throw new Error('EdgeSpeechProvider: vadSensitivity must be between 0.0 and 1.0')
   }
@@ -54,15 +51,17 @@ export function EdgeSpeechProvider({
     })
   }, [vadSensitivity, sampleRate, bufferSize])
 
+  const credentials = resolveCredentials(appId, appSecret)
+
   useEffect(() => {
     // Init reports its own progress through onStateChange ('initializing' → 'ready'),
     // so there is nothing to do with the promise here.
-    SwitchboardVoiceModule.initialize(appId, appSecret)
+    SwitchboardVoiceModule.initialize(credentials.appId, credentials.appSecret)
 
     return () => {
       SwitchboardVoiceModule.stopListening().catch(() => {})
     }
-  }, [appId, appSecret])
+  }, [credentials.appId, credentials.appSecret])
 
   const value: EdgeSpeechContextValue = {
     // Keep NativeModule method bound to avoid losing JSI `this` context.
