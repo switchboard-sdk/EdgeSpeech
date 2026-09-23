@@ -26,12 +26,18 @@ function VoiceChat() {
 
 export default function App() {
   return (
-    <EdgeSpeechProvider appId="YOUR_APP_ID" appSecret="YOUR_APP_SECRET">
+    <EdgeSpeechProvider>
       <VoiceChat />
     </EdgeSpeechProvider>
   )
 }
 ```
+
+> [!TIP]
+> EdgeSpeech works out of the box: the library ships with default test credentials, so there is
+> nothing to sign up for before you try it. For a production app, get your own
+> Switchboard SDK credentials ([sign up here](https://console.switchboard.audio/register)) and pass
+> them as `appId` / `appSecret`.
 
 > [!TIP]
 > The included [example app](./example/) shows a complete speech-to-speech workflow.
@@ -200,16 +206,11 @@ Wrap your app in the `EdgeSpeechProvider` and configure it.
 <!-- prettier-ignore -->
 ```tsx
 <EdgeSpeechProvider
-  appId="YOUR_APP_ID"         // Optional: Switchboard app ID
-  appSecret="YOUR_APP_SECRET" // Optional: Switchboard app secret
-  vadSensitivity={0.5}        // Optional: VAD sensitivity 0.0–1.0 (default: 0.5)
+  vadSensitivity={0.5} // Optional: VAD sensitivity 0.0–1.0 (default: 0.5)
 >
   <App />
 </EdgeSpeechProvider>
 ```
-
-> [!TIP]
-> This library ships with built-in demo credentials so you can run it immediately without creating a Switchboard account.
 
 > [!NOTE]
 > Your Switchboard `APP_ID` and `APP_SECRET` are **safe to bundle in your application**. They function like a publishing key and are intended to be distributed with your app.

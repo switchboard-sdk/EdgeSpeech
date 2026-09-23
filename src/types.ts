@@ -18,11 +18,11 @@ export type VoiceState = 'idle' | 'initializing' | 'ready' | 'listening' | 'proc
  * Configuration for SwitchboardVoice
  */
 export interface VoiceConfig {
-  /** Switchboard app ID (required) */
-  appId: string
+  /** Switchboard app ID (optional) — the library has default credentials) */
+  appId?: string
 
-  /** Switchboard app secret (required) */
-  appSecret: string
+  /** Switchboard app secret (optional) — the library has default credentials) */
+  appSecret?: string
 
   /** VAD sensitivity (0.0-1.0, default: 0.5) */
   vadSensitivity?: number

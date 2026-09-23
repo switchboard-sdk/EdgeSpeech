@@ -1,3 +1,4 @@
+import { resolveCredentials } from './credentials'
 import SwitchboardVoiceModule from './SwitchboardVoiceModule'
 import type {
   VoiceConfig,
@@ -17,11 +18,8 @@ import type {
  *
  * @example
  * ```typescript
- * // Configure
- * await EdgeSpeech.configure({
- *   appId: 'YOUR_APP_ID',
- *   appSecret: 'YOUR_APP_SECRET',
- * });
+ * // Configure (credentials are optional — the library has defaults)
+ * await EdgeSpeech.configure({});
  *
  * // Set up event handlers
  * EdgeSpeech.onTranscript = (text, isFinal) => {
@@ -60,24 +58,18 @@ class EdgeSpeechAPI {
   }
 
   /**
-   * Configure EdgeSpeech with app credentials and optional settings
+   * Configure EdgeSpeech with optional app credentials and settings
+   *
+   * Credentials are optional: the library has defaults.
    *
    * @param config - Configuration object
-   * @throws Error if required parameters are missing or invalid
+   * @throws Error if a supplied parameter is invalid
    */
-  async configure(config: VoiceConfig): Promise<void> {
+  async configure(config: VoiceConfig = {}): Promise<void> {
     // Setup event listeners on first configure call
     this._ensureListenersSetup()
 
     // Validation
-    if (!config.appId || config.appId.trim() === '') {
-      throw new Error('appId is required')
-    }
-
-    if (!config.appSecret || config.appSecret.trim() === '') {
-      throw new Error('appSecret is required')
-    }
-
     if (
       config.vadSensitivity !== undefined &&
       (config.vadSensitivity < 0.0 || config.vadSensitivity > 1.0)
@@ -85,11 +77,9 @@ class EdgeSpeechAPI {
       throw new Error('vadSensitivity must be between 0.0 and 1.0')
     }
 
-
     // Apply defaults
     const finalConfig = {
-      appId: config.appId,
-      appSecret: config.appSecret,
+      ...resolveCredentials(config.appId, config.appSecret),
       vadSensitivity: config.vadSensitivity ?? 0.5,
     }
 
