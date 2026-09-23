@@ -15,9 +15,7 @@ export interface EdgeSpeechContextValue {
 const EdgeSpeechContext = createContext<EdgeSpeechContextValue | null>(null)
 
 export interface EdgeSpeechProviderProps {
-  /** Switchboard app ID (optional — the library has default credentials) */
   appId?: string
-  /** Switchboard app secret (optional — the library has default credentials) */
   appSecret?: string
   vadSensitivity?: number
   sampleRate?: number

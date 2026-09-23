@@ -20,7 +20,7 @@ instead, replace `chatService.ts`; `sendToChat(message, history)` is the only co
 depends on.
 
 > [!WARNING]
-> The demo credentials in `.env.example` come with a limited amount of chat credits.
+> The demo credentials in `.env` come with a limited amount of chat credits.
 
 ## Prerequisites
 
@@ -66,14 +66,8 @@ npm install
 > (cd android && ./gradlew :synervoz_edgespeech:downloadModels)
 > ```
 
-Copy the environment file and add your credentials:
-
-```bash
-cp .env.example .env
-```
-
-Edit `.env` with your Switchboard App ID and App Secret. Demo credentials are included, so this
-works as-is for a first run.
+`.env` ships with demo credentials, so this works as-is for a first run. To use your own, edit it
+with your Switchboard App ID and App Secret.
 
 ## Run on iOS
 
