@@ -29,12 +29,14 @@ function Dictation(): React.JSX.Element {
   const [dictateRequested, setDictateRequested] = useState(false)
   const prevVoiceStateRef = useRef(voiceState)
 
-  // Each final transcript replaces the text area
+  // Each final transcript replaces the text area and ends dictation (one utterance per press).
   useEffect(() => {
     onTranscriptComplete((transcript: string) => {
       setText(transcript)
+      setDictateRequested(false)
+      stopListening()
     })
-  }, [onTranscriptComplete])
+  }, [onTranscriptComplete, stopListening])
 
   // Workaround for speak() leaving the library listening (see SPEAK_STARTS_LISTENING.md).
   useEffect(() => {
