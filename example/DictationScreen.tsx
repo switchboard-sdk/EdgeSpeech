@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import {
   ScrollView,
   StatusBar,
@@ -25,6 +25,9 @@ function Dictation(): React.JSX.Element {
   } = useEdgeSpeech()
 
   const [text, setText] = useState('This is EdgeSpeech.')
+  // Whether the user pressed Dictate; speak() also puts the library into 'listening'.
+  const [dictateRequested, setDictateRequested] = useState(false)
+  const prevVoiceStateRef = useRef(voiceState)
 
   // Each final transcript replaces the text area
   useEffect(() => {
@@ -33,8 +36,21 @@ function Dictation(): React.JSX.Element {
     })
   }, [onTranscriptComplete])
 
+  // Workaround for speak() leaving the library listening (see SPEAK_STARTS_LISTENING.md).
+  useEffect(() => {
+    if (
+      prevVoiceStateRef.current === 'speaking' &&
+      voiceState === 'listening' &&
+      !dictateRequested
+    ) {
+      stopListening()
+    }
+    prevVoiceStateRef.current = voiceState
+  }, [voiceState, dictateRequested, stopListening])
+
   // 'processing' is Whisper decoding between utterances; still dictating from the user's view.
-  const isDictating = voiceState === 'listening' || voiceState === 'processing'
+  const isDictating =
+    dictateRequested && (voiceState === 'listening' || voiceState === 'processing')
 
   // Not operable until init finishes: 'initializing' is staging in progress, 'idle' means
   // the SDK is not up at all — not started yet, or init failed, which `error` tells apart.
@@ -42,6 +58,7 @@ function Dictation(): React.JSX.Element {
 
   const handleDictate = async () => {
     if (isDictating) {
+      setDictateRequested(false)
       await stopListening()
       return
     }
@@ -50,6 +67,7 @@ function Dictation(): React.JSX.Element {
       Alert.alert('Permission Denied', 'Microphone permission is required')
       return
     }
+    setDictateRequested(true)
     await listen()
   }
 
@@ -67,11 +85,8 @@ function Dictation(): React.JSX.Element {
         return 'Preparing…'
       case 'idle':
         return 'Not ready'
-      case 'listening':
-      case 'processing':
-        return 'Dictating…'
       default:
-        return 'Dictate'
+        return isDictating ? 'Dictating…' : 'Dictate'
     }
   }
 
