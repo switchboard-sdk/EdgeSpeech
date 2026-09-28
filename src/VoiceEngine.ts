@@ -492,6 +492,7 @@ class VoiceEngine {
     return {
       type: 'Realtime',
       config: {
+        voiceProcessingEnabled: true,
         microphoneEnabled: true,
         speakerEnabled: true,
         // Android only: an Oboe stream parameter, so it must be set at creation —
