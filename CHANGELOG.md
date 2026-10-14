@@ -5,7 +5,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.2.0]
+## [2.0.0]
+
+First release with Android support. Major version because the state machine and config options
+changed — see **Upgrading from 1.x** below.
 
 ### Added
 
@@ -18,12 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `useEdgeSpeech().voiceState` is seeded from the engine's current state, so a component that
   mounts mid-initialization reads `'initializing'` rather than a stale value.
 
-### Changed
+### Changed — BREAKING
 
-- The library now ships its own default Switchboard credentials, so `EdgeSpeechProvider`,
-  `EdgeSpeech.configure()`, and `initialize()` work with no credentials passed. `appId` and
-  `appSecret` are now optional; supplying them still overrides the defaults. Blank
-  or whitespace-only values fall back to the defaults instead of throwing.
 - `VoiceState` now separates "the SDK is not up" from "the SDK is up and waiting":
   `'idle' | 'initializing' | 'ready' | 'listening' | 'processing' | 'speaking'`.
   **`'idle'` has changed meaning** — it no longer means "ready and waiting", it means the SDK is
@@ -34,16 +33,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   engine; the cause still arrives via `onError` / the hook's `error`.
 - `stopListening()` and a `stopSpeaking()` with no listening session now emit `'ready'`
   (previously `'idle'`).
+
+### Changed
+
+- The library now ships its own default Switchboard credentials, so `EdgeSpeechProvider`,
+  `EdgeSpeech.configure()`, and `initialize()` work with no credentials passed. `appId` and
+  `appSecret` are now optional; supplying them still overrides the defaults. Blank
+  or whitespace-only values fall back to the defaults instead of throwing.
 - **One STT model and one TTS voice on both platforms.** Whisper `base.en` and the `en_GB` Piper
   voice — the same ones the iOS frameworks bake in — are now fixed, so the two platforms behave
   identically.
 
-### Removed
+### Removed — BREAKING
 
 - `sttModel` config option (`EdgeSpeechProvider` prop, `EdgeSpeech.configure()`, `VoiceConfig`).
   The STT model is fixed to Whisper `base.en`.
 - `ttsVoice` config option (`EdgeSpeechProvider` prop, `EdgeSpeech.configure()`, `VoiceConfig`).
   The TTS voice is fixed to `en_GB`.
+
+### Upgrading from 1.x
+
+- Replace checks for `voiceState === 'idle'` (meaning "ready to listen/speak") with
+  `voiceState === 'ready'`.
+- Remove any `sttModel` / `ttsVoice` props or `configure()` keys; TypeScript will flag them.
 
 ## [1.1.0]
 
