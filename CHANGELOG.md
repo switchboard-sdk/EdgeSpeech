@@ -5,7 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [2.0.0]
+
+First release with Android support. Major version because the state machine and config options
+changed — see **Upgrading from 1.x** below.
+
+### Added
+
+- **Android support.** Requires NDK r29 and the Synervoz Maven repository. The new Expo config
+  plugin (`app.plugin.js`) applies the Android Gradle setup on prebuild; bare React Native apps
+  configure it by hand. STT/TTS models download into the library's assets during the first
+  Android build. See the README for setup.
+- `'initializing'` state, covering SDK startup and the Android STT/TTS model staging. A
+  `listen()`/`speak()` issued during it waits rather than failing.
+- `useEdgeSpeech().voiceState` is seeded from the engine's current state, so a component that
+  mounts mid-initialization reads `'initializing'` rather than a stale value.
+
+### Changed — BREAKING
+
+- `VoiceState` now separates "the SDK is not up" from "the SDK is up and waiting":
+  `'idle' | 'initializing' | 'ready' | 'listening' | 'processing' | 'speaking'`.
+  **`'idle'` has changed meaning** — it no longer means "ready and waiting", it means the SDK is
+  not initialized (either `initialize()` has not run, or it failed). The initialized-and-waiting
+  state is now `'ready'`. Code that gates on `voiceState === 'idle'` must move to `'ready'`;
+  because both are valid `VoiceState` values, TypeScript will **not** flag the change for you.
+- A failed `initialize()` now reports `'idle'` instead of looking indistinguishable from a ready
+  engine; the cause still arrives via `onError` / the hook's `error`.
+- `stopListening()` and a `stopSpeaking()` with no listening session now emit `'ready'`
+  (previously `'idle'`).
 
 ### Changed
 
@@ -13,6 +40,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `EdgeSpeech.configure()`, and `initialize()` work with no credentials passed. `appId` and
   `appSecret` are now optional; supplying them still overrides the defaults. Blank
   or whitespace-only values fall back to the defaults instead of throwing.
+- **One STT model and one TTS voice on both platforms.** Whisper `base.en` and the `en_GB` Piper
+  voice — the same ones the iOS frameworks bake in — are now fixed, so the two platforms behave
+  identically.
+
+### Removed — BREAKING
+
+- `sttModel` config option (`EdgeSpeechProvider` prop, `EdgeSpeech.configure()`, `VoiceConfig`).
+  The STT model is fixed to Whisper `base.en`.
+- `ttsVoice` config option (`EdgeSpeechProvider` prop, `EdgeSpeech.configure()`, `VoiceConfig`).
+  The TTS voice is fixed to `en_GB`.
+
+### Upgrading from 1.x
+
+- Replace checks for `voiceState === 'idle'` (meaning "ready to listen/speak") with
+  `voiceState === 'ready'`.
+- Remove any `sttModel` / `ttsVoice` props or `configure()` keys; TypeScript will flag them.
 
 ## [1.1.0]
 
@@ -39,45 +82,6 @@ is a thin delegate over the Switchboard SDK's `SwitchboardJSONRPC`.
 - Minimum **React Native raised to 0.81** (was 0.74).
 - No longer depends on `expo-modules-core`; works in both Expo (prebuild) and bare RN apps.
 
-## [Unreleased]
-
-### Changed — BREAKING
-
-- `VoiceState` now separates "the SDK is not up" from "the SDK is up and waiting":
-  `'idle' | 'initializing' | 'ready' | 'listening' | 'processing' | 'speaking'`.
-  **`'idle'` has changed meaning** — it no longer means "ready and waiting", it means the SDK is
-  not initialized (either `initialize()` has not run, or it failed). The initialized-and-waiting
-  state is now `'ready'`. Code that gates on `voiceState === 'idle'` must move to `'ready'`;
-  because both are valid `VoiceState` values, TypeScript will **not** flag the change for you.
-- A failed `initialize()` now reports `'idle'` instead of looking indistinguishable from a ready
-  engine; the cause still arrives via `onError` / the hook's `error`.
-- `stopListening()` and a `stopSpeaking()` with no listening session now emit `'ready'`
-  (previously `'idle'`).
-- **One STT model and one TTS voice on both platforms.** Whisper `base.en` and the `en_GB` Piper
-  voice — the same ones the iOS frameworks bake in — are now fixed, so the two platforms behave
-  identically.
-
-### Added
-
-- `'initializing'` state, covering SDK startup and the Android STT/TTS model staging. A
-  `listen()`/`speak()` issued during it waits rather than failing.
-- `useEdgeSpeech().voiceState` is seeded from the engine's current state, so a component that
-  mounts mid-initialization reads `'initializing'` rather than a stale value.
-- Initial project scaffolding
-- TurboModule architecture for React Native bridge
-- iOS native module setup
-- TypeScript types and configuration
-
-### Removed
-
-- `useEdgeSpeech().isInitializing` — replaced by `voiceState === 'initializing'`.
-- `sttModel` config option (`EdgeSpeechProvider` prop, `EdgeSpeech.configure()`, `VoiceConfig`).
-  It only ever did anything on Android; iOS ships `base.en` alone inside
-  `SwitchboardWhisper.framework`, with no CoreML encoder for any other model.
-- `ttsVoice` config option. Same asymmetry: `Sherpa.TTS` hardcodes English in its constructor, so
-  on iOS the value was silently ignored while on Android a typo threw `TTS_VOICE_UNAVAILABLE`.
-- `edgespeechModels` Gradle property — the model set is fixed, so there is nothing to override.
-
 ## [0.1.0] - TBD
 
 ### Added
@@ -89,6 +93,10 @@ is a thin delegate over the Switchboard SDK's `SwitchboardJSONRPC`.
 - Event-based callback API
 - Example application
 - iOS support
+- Initial project scaffolding
+- TurboModule architecture for React Native bridge
+- iOS native module setup
+- TypeScript types and configuration
 
 [Unreleased]: https://github.com/yourusername/switchboard-voice-rn/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/yourusername/switchboard-voice-rn/releases/tag/v0.1.0
